@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  font-family: "Inter", -apple-system, sans-serif;
+  background: #15140f;
+  color: #edeae3;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+input {
+  font-family: inherit;
+}
+::selection {
+  background: #d4922c55;
+}
+.foodbtn:hover {
+  border-color: #d4922c !important;
+}
+.foodbtn:active {
+  transform: scale(0.98);
+}
