@@ -10,17 +10,18 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.36.4",
     "next": "^16.3.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "drizzle-orm": "^0.36.4",
-    "@neondatabase/serverless": "^0.10.4"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
-    "drizzle-kit": "^0.28.1"
+    "drizzle-kit": "^0.28.1",
+    "typescript": "^5.7.2"
   }
 }
