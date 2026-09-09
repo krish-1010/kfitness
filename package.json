@@ -3,25 +3,27 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.36.4",
     "next": "^16.3.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "drizzle-orm": "^0.36.4",
+    "@neondatabase/serverless": "^0.10.4"
   },
   "devDependencies": {
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
-    "drizzle-kit": "^0.28.1",
-    "typescript": "^5.7.2"
+    "drizzle-kit": "^0.28.1"
   }
 }
