@@ -13,6 +13,11 @@ export const logItems = pgTable("log_items", {
 
 // One row per (date, supplement) pair, only written when toggled true.
 // Absence of a row = not done, matching the original `log.supplements[id]` boolean map.
+// Uses a surrogate id + unique constraint rather than a composite primary
+// key — drizzle-kit push has a known bug (drizzle-team/drizzle-orm #4471)
+// where it repeatedly, incorrectly tries to drop/recreate composite PK
+// constraints and fails against Postgres. A unique constraint gives the
+// same "no duplicate (date, supplement) rows" guarantee without hitting it.
 export const supplementLog = pgTable(
   "supplement_log",
   {
@@ -73,4 +78,13 @@ export const foods = pgTable("foods", {
   protein: real("protein").notNull(),
   kcal: real("kcal").notNull().default(0),
   archived: boolean("archived").notNull().default(false),
+});
+
+// One row per water log event. Multiple per day, unlike weight — you drink
+// water repeatedly through the day, so this sums rather than overwrites.
+export const waterLog = pgTable("water_log", {
+  id: serial("id").primaryKey(),
+  date: text("date").notNull(),
+  amountMl: integer("amount_ml").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });

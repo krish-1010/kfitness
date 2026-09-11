@@ -3,6 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { SUPPLEMENTS, PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 
+// Formats a Date using its LOCAL calendar fields, never toISOString() (which
+// converts to UTC first). In any positive-UTC-offset timezone like IST,
+// local midnight is the previous day in UTC, so toISOString().slice(0,10)
+// silently loses a day on every round trip — this avoids that entirely.
 function toLocalDateStr(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -12,16 +16,13 @@ function toLocalDateStr(d: Date): string {
 
 const TODAY = () => toLocalDateStr(new Date());
 
+const WATER_PRESETS = [500, 650, 850] as const;
+
 type LogItem = { id: number; name: string; protein: number; kcal: number };
 type DayLog = { items: LogItem[]; supplements: Record<string, boolean> };
 type WeightEntry = { date: string; weight: number };
-type Food = {
-  id: number;
-  name: string;
-  protein: number;
-  kcal: number;
-  archived: boolean;
-};
+type WaterEntry = { id: number; date: string; amountMl: number; createdAt: string };
+type Food = { id: number; name: string; protein: number; kcal: number; archived: boolean };
 type Exercise = {
   id: number;
   name: string;
@@ -42,12 +43,7 @@ type ExerciseLogRow = {
   defaultReps: string | null;
 };
 type DayType = "Push" | "Pull" | "Legs" | "Rest";
-type WorkoutState = {
-  dayType: DayType;
-  status: string;
-  suggested: boolean;
-  log: ExerciseLogRow[];
-};
+type WorkoutState = { dayType: DayType; status: string; suggested: boolean; log: ExerciseLogRow[] };
 
 const ink = "#EDEAE3",
   inkDim = "#9A968C",
@@ -58,42 +54,16 @@ const ink = "#EDEAE3",
   green = "#7FA66B",
   red = "#C1604B";
 
-function ProgressBar({
-  value,
-  goal,
-  color,
-}: {
-  value: number;
-  goal: number;
-  color: string;
-}) {
+function ProgressBar({ value, goal, color }: { value: number; goal: number; color: string }) {
   const pct = Math.min(100, (value / goal) * 100);
   return (
-    <div
-      style={{
-        height: 8,
-        background: bg,
-        overflow: "hidden",
-        border: `1px solid ${line}`,
-      }}
-    >
-      <div
-        style={{
-          width: `${pct}%`,
-          height: "100%",
-          background: color,
-          transition: "width 0.3s ease",
-        }}
-      />
+    <div style={{ height: 8, background: bg, overflow: "hidden", border: `1px solid ${line}` }}>
+      <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width 0.3s ease" }} />
     </div>
   );
 }
 
-const cardStyle = {
-  background: bg2,
-  border: `1px solid ${line}`,
-  padding: 14,
-} as const;
+const cardStyle = { background: bg2, border: `1px solid ${line}`, padding: 14 } as const;
 const inputStyle = {
   background: bg,
   border: `1px solid ${line}`,
@@ -103,11 +73,7 @@ const inputStyle = {
   outline: "none",
   width: "100%",
 } as const;
-const smallInputStyle = {
-  ...inputStyle,
-  padding: "6px 8px",
-  fontSize: 13,
-} as const;
+const smallInputStyle = { ...inputStyle, padding: "6px 8px", fontSize: 13 } as const;
 const primaryBtn = {
   background: amber,
   border: "none",
@@ -117,27 +83,9 @@ const primaryBtn = {
   fontWeight: 600,
   whiteSpace: "nowrap",
 } as const;
-const secondaryBtn = {
-  background: "none",
-  border: `1px solid ${line}`,
-  color: inkDim,
-  padding: "9px 16px",
-  fontSize: 14,
-} as const;
-const tinyBtn = {
-  background: "none",
-  border: `1px solid ${line}`,
-  color: inkDim,
-  padding: "5px 10px",
-  fontSize: 12,
-} as const;
-const sectionLabel = {
-  marginBottom: 8,
-  fontSize: 13,
-  color: inkDim,
-  fontWeight: 600,
-  letterSpacing: 0.3,
-} as const;
+const secondaryBtn = { background: "none", border: `1px solid ${line}`, color: inkDim, padding: "9px 16px", fontSize: 14 } as const;
+const tinyBtn = { background: "none", border: `1px solid ${line}`, color: inkDim, padding: "5px 10px", fontSize: 12 } as const;
+const sectionLabel = { marginBottom: 8, fontSize: 13, color: inkDim, fontWeight: 600, letterSpacing: 0.3 } as const;
 
 export default function App() {
   const [date, setDate] = useState(TODAY());
@@ -146,12 +94,7 @@ export default function App() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [exerciseOptions, setExerciseOptions] = useState<Exercise[]>([]);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
-  const [workout, setWorkout] = useState<WorkoutState>({
-    dayType: "Push",
-    status: "planned",
-    suggested: true,
-    log: [],
-  });
+  const [workout, setWorkout] = useState<WorkoutState>({ dayType: "Push", status: "planned", suggested: true, log: [] });
 
   const [customName, setCustomName] = useState("");
   const [customProtein, setCustomProtein] = useState("");
@@ -167,14 +110,12 @@ export default function App() {
   const [showCustomExercise, setShowCustomExercise] = useState(false);
   const [showManageExercises, setShowManageExercises] = useState(false);
   const [editingExId, setEditingExId] = useState<number | null>(null);
-  const [exEdit, setExEdit] = useState({
-    name: "",
-    dayType: "Push",
-    defaultSets: "3",
-    defaultReps: "8-12",
-  });
+  const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12" });
 
   const [weightInput, setWeightInput] = useState("");
+  const [waterEntries, setWaterEntries] = useState<WaterEntry[]>([]);
+  const [waterTotal, setWaterTotal] = useState(0);
+  const [customWaterMl, setCustomWaterMl] = useState("");
   const [loading, setLoading] = useState(true);
 
   const loadLog = useCallback(async (d: string) => {
@@ -209,25 +150,25 @@ export default function App() {
     setAllExercises(await res.json());
   }, []);
 
+  const loadWater = useCallback(async (d: string) => {
+    const res = await fetch(`/api/water?date=${d}`);
+    const data = await res.json();
+    setWaterEntries(data.entries);
+    setWaterTotal(data.total);
+  }, []);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      loadLog(date),
-      loadWeights(),
-      loadFoods(),
-      loadWorkout(date),
-    ]).finally(() => setLoading(false));
-  }, [date, loadLog, loadWeights, loadFoods, loadWorkout]);
+    Promise.all([loadLog(date), loadWeights(), loadFoods(), loadWorkout(date), loadWater(date)]).finally(() =>
+      setLoading(false)
+    );
+  }, [date, loadLog, loadWeights, loadFoods, loadWorkout, loadWater]);
 
   const totalProtein = log.items.reduce((s, i) => s + i.protein, 0);
   const totalKcal = log.items.reduce((s, i) => s + (i.kcal || 0), 0);
 
   // ---- Food ----
-  const addFood = async (food: {
-    name: string;
-    protein: number;
-    kcal: number;
-  }) => {
+  const addFood = async (food: { name: string; protein: number; kcal: number }) => {
     const res = await fetch("/api/log/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -238,20 +179,13 @@ export default function App() {
   };
 
   const removeFood = async (id: number) => {
-    setLog((prev) => ({
-      ...prev,
-      items: prev.items.filter((i) => i.id !== id),
-    }));
+    setLog((prev) => ({ ...prev, items: prev.items.filter((i) => i.id !== id) }));
     await fetch(`/api/log/items/${id}`, { method: "DELETE" });
   };
 
   const addCustomFood = () => {
     if (!customName.trim() || !customProtein) return;
-    addFood({
-      name: customName.trim(),
-      protein: parseFloat(customProtein) || 0,
-      kcal: parseFloat(customKcal) || 0,
-    });
+    addFood({ name: customName.trim(), protein: parseFloat(customProtein) || 0, kcal: parseFloat(customKcal) || 0 });
     setCustomName("");
     setCustomProtein("");
     setCustomKcal("");
@@ -278,11 +212,7 @@ export default function App() {
 
   const startEditFood = (f: Food) => {
     setEditingFoodId(f.id);
-    setFoodEdit({
-      name: f.name,
-      protein: String(f.protein),
-      kcal: String(f.kcal),
-    });
+    setFoodEdit({ name: f.name, protein: String(f.protein), kcal: String(f.kcal) });
   };
 
   const saveEditFood = async (id: number) => {
@@ -308,10 +238,7 @@ export default function App() {
   // ---- Supplements ----
   const toggleSupp = async (id: string) => {
     const next = !log.supplements[id];
-    setLog((prev) => ({
-      ...prev,
-      supplements: { ...prev.supplements, [id]: next },
-    }));
+    setLog((prev) => ({ ...prev, supplements: { ...prev.supplements, [id]: next } }));
     await fetch("/api/log/supplements", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -332,12 +259,29 @@ export default function App() {
     setWeightInput("");
   };
 
+  // ---- Water ----
+  const logWater = async (amountMl: number) => {
+    if (!amountMl || amountMl <= 0) return;
+    const res = await fetch("/api/water", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, amountMl }),
+    });
+    const entry: WaterEntry = await res.json();
+    setWaterEntries((prev) => [...prev, entry]);
+    setWaterTotal((prev) => prev + amountMl);
+    setCustomWaterMl("");
+  };
+
+  const removeWater = async (id: number) => {
+    const entry = waterEntries.find((w) => w.id === id);
+    setWaterEntries((prev) => prev.filter((w) => w.id !== id));
+    if (entry) setWaterTotal((prev) => prev - entry.amountMl);
+    await fetch(`/api/water/${id}`, { method: "DELETE" });
+  };
+
   // ---- Workout / exercise ----
-  const commitSession = async (
-    dayType: DayType,
-    status: string,
-    isManualOverride = false,
-  ) => {
+  const commitSession = async (dayType: DayType, status: string, isManualOverride = false) => {
     await fetch("/api/workout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -350,33 +294,17 @@ export default function App() {
     const res = await fetch("/api/workout/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date,
-        exerciseId: ex.id,
-        sets: ex.defaultSets,
-        reps: ex.defaultReps,
-      }),
+      body: JSON.stringify({ date, exerciseId: ex.id, sets: ex.defaultSets, reps: ex.defaultReps }),
     });
     const row = await res.json();
     setWorkout((prev) => ({
       ...prev,
-      log: [
-        ...prev.log,
-        {
-          ...row,
-          name: ex.name,
-          defaultSets: ex.defaultSets,
-          defaultReps: ex.defaultReps,
-        },
-      ],
+      log: [...prev.log, { ...row, name: ex.name, defaultSets: ex.defaultSets, defaultReps: ex.defaultReps }],
     }));
   };
 
   const updateLogRow = async (id: number, patch: Partial<ExerciseLogRow>) => {
-    setWorkout((prev) => ({
-      ...prev,
-      log: prev.log.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-    }));
+    setWorkout((prev) => ({ ...prev, log: prev.log.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
     await fetch(`/api/workout/log/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -385,10 +313,7 @@ export default function App() {
   };
 
   const removeLogRow = async (id: number) => {
-    setWorkout((prev) => ({
-      ...prev,
-      log: prev.log.filter((r) => r.id !== id),
-    }));
+    setWorkout((prev) => ({ ...prev, log: prev.log.filter((r) => r.id !== id) }));
     await fetch(`/api/workout/log/${id}`, { method: "DELETE" });
   };
 
@@ -415,12 +340,7 @@ export default function App() {
 
   const startEditEx = (ex: Exercise) => {
     setEditingExId(ex.id);
-    setExEdit({
-      name: ex.name,
-      dayType: ex.dayType,
-      defaultSets: String(ex.defaultSets),
-      defaultReps: ex.defaultReps,
-    });
+    setExEdit({ name: ex.name, dayType: ex.dayType, defaultSets: String(ex.defaultSets), defaultReps: ex.defaultReps });
   };
 
   const saveEditEx = async (id: number) => {
@@ -459,12 +379,8 @@ export default function App() {
   });
 
   const last8Weights = weights.slice(-8);
-  const minW = last8Weights.length
-    ? Math.min(...last8Weights.map((w) => w.weight)) - 0.5
-    : 0;
-  const maxW = last8Weights.length
-    ? Math.max(...last8Weights.map((w) => w.weight)) + 0.5
-    : 1;
+  const minW = last8Weights.length ? Math.min(...last8Weights.map((w) => w.weight)) - 0.5 : 0;
+  const maxW = last8Weights.length ? Math.max(...last8Weights.map((w) => w.weight)) + 0.5 : 1;
 
   const navBtn = {
     width: 36,
@@ -487,15 +403,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: inkDim,
-        }}
-      >
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
         Loading…
       </div>
     );
@@ -507,25 +415,9 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", padding: "24px 16px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 20,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 0.5,
-                color: inkDim,
-                marginBottom: 2,
-              }}
-            >
-              CUT LOG
-            </div>
+            <div style={{ fontSize: 11, letterSpacing: 0.5, color: inkDim, marginBottom: 2 }}>CUT LOG</div>
             <div style={{ fontSize: 22, fontWeight: 600 }}>
               {dateLabel}
               {isToday ? " · Today" : ""}
@@ -535,11 +427,7 @@ export default function App() {
             <button onClick={() => shiftDate(-1)} style={navBtn}>
               ‹
             </button>
-            <button
-              onClick={() => shiftDate(1)}
-              style={navBtn}
-              disabled={isToday}
-            >
+            <button onClick={() => shiftDate(1)} style={navBtn} disabled={isToday}>
               ›
             </button>
           </div>
@@ -548,54 +436,21 @@ export default function App() {
         {/* ---- Workout / exercise section ---- */}
         <div
           style={{
-            background:
-              workout.dayType === "Rest"
-                ? bg2
-                : `linear-gradient(135deg, ${bg2}, ${bg})`,
+            background: workout.dayType === "Rest" ? bg2 : `linear-gradient(135deg, ${bg2}, ${bg})`,
             border: `1px solid ${workout.dayType === "Rest" ? line : amber + "55"}`,
             padding: "14px 16px",
             marginBottom: 12,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: workout.dayType !== "Rest" ? 12 : 0,
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: workout.dayType !== "Rest" ? 12 : 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 20 }}>
-                {workout.dayType === "Rest" ? "💤" : "🏋️"}
-              </div>
+              <div style={{ fontSize: 20 }}>{workout.dayType === "Rest" ? "💤" : "🏋️"}</div>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {workout.dayType === "Rest"
-                    ? "Rest day"
-                    : `${workout.dayType} day`}
-                  {workout.suggested && (
-                    <span
-                      style={{ fontSize: 11, color: inkDim, fontWeight: 400 }}
-                    >
-                      {" "}
-                      · suggested
-                    </span>
-                  )}
-                  {workout.status === "done" && (
-                    <span
-                      style={{ fontSize: 11, color: green, fontWeight: 400 }}
-                    >
-                      {" "}
-                      · done
-                    </span>
-                  )}
-                  {workout.status === "skipped" && (
-                    <span style={{ fontSize: 11, color: red, fontWeight: 400 }}>
-                      {" "}
-                      · skipped
-                    </span>
-                  )}
+                  {workout.dayType === "Rest" ? "Rest day" : `${workout.dayType} day`}
+                  {workout.suggested && <span style={{ fontSize: 11, color: inkDim, fontWeight: 400 }}> · suggested</span>}
+                  {workout.status === "done" && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}> · done</span>}
+                  {workout.status === "skipped" && <span style={{ fontSize: 11, color: red, fontWeight: 400 }}> · skipped</span>}
                 </div>
                 {workout.dayType !== "Rest" && (
                   <div style={{ fontSize: 12, color: inkDim }}>
@@ -606,9 +461,7 @@ export default function App() {
             </div>
             <select
               value={workout.dayType}
-              onChange={(e) =>
-                commitSession(e.target.value as DayType, "planned", true)
-              }
+              onChange={(e) => commitSession(e.target.value as DayType, "planned", true)}
               style={{ ...smallInputStyle, width: "auto" }}
             >
               <option value="Push">Push</option>
@@ -630,17 +483,12 @@ export default function App() {
                         alignItems: "center",
                         gap: 8,
                         padding: "8px 10px",
-                        borderBottom:
-                          idx < workout.log.length - 1
-                            ? `1px solid ${line}`
-                            : "none",
+                        borderBottom: idx < workout.log.length - 1 ? `1px solid ${line}` : "none",
                         background: bg,
                       }}
                     >
                       <button
-                        onClick={() =>
-                          updateLogRow(row.id, { done: !row.done })
-                        }
+                        onClick={() => updateLogRow(row.id, { done: !row.done })}
                         style={{
                           width: 18,
                           height: 18,
@@ -654,65 +502,28 @@ export default function App() {
                       >
                         {row.done ? "✓" : ""}
                       </button>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          flex: 1,
-                          textDecoration: row.done ? "line-through" : "none",
-                          color: row.done ? inkDim : ink,
-                        }}
-                      >
+                      <span style={{ fontSize: 13, flex: 1, textDecoration: row.done ? "line-through" : "none", color: row.done ? inkDim : ink }}>
                         {row.name}
                       </span>
                       <input
                         value={row.sets ?? ""}
-                        onChange={(e) =>
-                          updateLogRow(row.id, {
-                            sets: parseInt(e.target.value) || 0,
-                          })
-                        }
-                        style={{
-                          ...smallInputStyle,
-                          width: 40,
-                          textAlign: "center",
-                        }}
+                        onChange={(e) => updateLogRow(row.id, { sets: parseInt(e.target.value) || 0 })}
+                        style={{ ...smallInputStyle, width: 40, textAlign: "center" }}
                         placeholder="sets"
                       />
                       <input
                         value={row.reps ?? ""}
-                        onChange={(e) =>
-                          updateLogRow(row.id, { reps: e.target.value })
-                        }
-                        style={{
-                          ...smallInputStyle,
-                          width: 55,
-                          textAlign: "center",
-                        }}
+                        onChange={(e) => updateLogRow(row.id, { reps: e.target.value })}
+                        style={{ ...smallInputStyle, width: 55, textAlign: "center" }}
                         placeholder="reps"
                       />
                       <input
                         value={row.weight ?? ""}
-                        onChange={(e) =>
-                          updateLogRow(row.id, {
-                            weight: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        style={{
-                          ...smallInputStyle,
-                          width: 50,
-                          textAlign: "center",
-                        }}
+                        onChange={(e) => updateLogRow(row.id, { weight: parseFloat(e.target.value) || 0 })}
+                        style={{ ...smallInputStyle, width: 50, textAlign: "center" }}
                         placeholder="kg"
                       />
-                      <button
-                        onClick={() => removeLogRow(row.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: inkDim,
-                          padding: 2,
-                        }}
-                      >
+                      <button onClick={() => removeLogRow(row.id)} style={{ background: "none", border: "none", color: inkDim, padding: 2 }}>
                         ✕
                       </button>
                     </div>
@@ -721,18 +532,9 @@ export default function App() {
               )}
 
               {exerciseOptions.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 6,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                   {exerciseOptions
-                    .filter(
-                      (ex) => !workout.log.some((r) => r.exerciseId === ex.id),
-                    )
+                    .filter((ex) => !workout.log.some((r) => r.exerciseId === ex.id))
                     .map((ex) => (
                       <button
                         key={ex.id}
@@ -747,54 +549,25 @@ export default function App() {
 
               {!showCustomExercise ? (
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => setShowCustomExercise(true)}
-                    style={{ ...secondaryBtn, flex: 1 }}
-                  >
+                  <button onClick={() => setShowCustomExercise(true)} style={{ ...secondaryBtn, flex: 1 }}>
                     + Custom exercise
                   </button>
-                  <button
-                    onClick={() => commitSession(workout.dayType, "done")}
-                    style={primaryBtn}
-                  >
+                  <button onClick={() => commitSession(workout.dayType, "done")} style={primaryBtn}>
                     Mark day done
                   </button>
                 </div>
               ) : (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  <input
-                    placeholder="Exercise name"
-                    value={customExName}
-                    onChange={(e) => setCustomExName(e.target.value)}
-                    style={inputStyle}
-                  />
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input placeholder="Exercise name" value={customExName} onChange={(e) => setCustomExName(e.target.value)} style={inputStyle} />
                   <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      placeholder="Sets"
-                      value={customExSets}
-                      onChange={(e) => setCustomExSets(e.target.value)}
-                      style={inputStyle}
-                    />
-                    <input
-                      placeholder="Reps (e.g. 8-12)"
-                      value={customExReps}
-                      onChange={(e) => setCustomExReps(e.target.value)}
-                      style={inputStyle}
-                    />
+                    <input placeholder="Sets" value={customExSets} onChange={(e) => setCustomExSets(e.target.value)} style={inputStyle} />
+                    <input placeholder="Reps (e.g. 8-12)" value={customExReps} onChange={(e) => setCustomExReps(e.target.value)} style={inputStyle} />
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={addCustomExercise}
-                      style={{ ...primaryBtn, flex: 1 }}
-                    >
+                    <button onClick={addCustomExercise} style={{ ...primaryBtn, flex: 1 }}>
                       Add
                     </button>
-                    <button
-                      onClick={() => setShowCustomExercise(false)}
-                      style={{ ...secondaryBtn, flex: 1 }}
-                    >
+                    <button onClick={() => setShowCustomExercise(false)} style={{ ...secondaryBtn, flex: 1 }}>
                       Cancel
                     </button>
                   </div>
@@ -804,10 +577,7 @@ export default function App() {
           )}
 
           {workout.dayType === "Rest" && workout.status !== "rest" && (
-            <button
-              onClick={() => commitSession("Rest", "rest", true)}
-              style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}
-            >
+            <button onClick={() => commitSession("Rest", "rest", true)} style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}>
               Confirm rest day
             </button>
           )}
@@ -830,33 +600,16 @@ export default function App() {
                   key={ex.id}
                   style={{
                     padding: "8px 10px",
-                    borderBottom:
-                      idx < allExercises.length - 1
-                        ? `1px solid ${line}`
-                        : "none",
+                    borderBottom: idx < allExercises.length - 1 ? `1px solid ${line}` : "none",
                   }}
                 >
                   {editingExId === ex.id ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <input
-                        value={exEdit.name}
-                        onChange={(e) =>
-                          setExEdit({ ...exEdit, name: e.target.value })
-                        }
-                        style={smallInputStyle}
-                      />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <input value={exEdit.name} onChange={(e) => setExEdit({ ...exEdit, name: e.target.value })} style={smallInputStyle} />
                       <div style={{ display: "flex", gap: 6 }}>
                         <select
                           value={exEdit.dayType}
-                          onChange={(e) =>
-                            setExEdit({ ...exEdit, dayType: e.target.value })
-                          }
+                          onChange={(e) => setExEdit({ ...exEdit, dayType: e.target.value })}
                           style={smallInputStyle}
                         >
                           <option value="Push">Push</option>
@@ -865,63 +618,28 @@ export default function App() {
                         </select>
                         <input
                           value={exEdit.defaultSets}
-                          onChange={(e) =>
-                            setExEdit({
-                              ...exEdit,
-                              defaultSets: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setExEdit({ ...exEdit, defaultSets: e.target.value })}
                           style={{ ...smallInputStyle, width: 50 }}
                         />
                         <input
                           value={exEdit.defaultReps}
-                          onChange={(e) =>
-                            setExEdit({
-                              ...exEdit,
-                              defaultReps: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setExEdit({ ...exEdit, defaultReps: e.target.value })}
                           style={{ ...smallInputStyle, width: 70 }}
                         />
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          onClick={() => saveEditEx(ex.id)}
-                          style={{
-                            ...primaryBtn,
-                            flex: 1,
-                            padding: "6px 10px",
-                            fontSize: 12,
-                          }}
-                        >
+                        <button onClick={() => saveEditEx(ex.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                           Save
                         </button>
-                        <button
-                          onClick={() => setEditingExId(null)}
-                          style={{
-                            ...secondaryBtn,
-                            flex: 1,
-                            padding: "6px 10px",
-                            fontSize: 12,
-                          }}
-                        >
+                        <button onClick={() => setEditingExId(null)} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                           Cancel
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 13 }}>
-                        {ex.name}{" "}
-                        <span style={{ color: inkDim }}>
-                          · {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}
-                        </span>
+                        {ex.name} <span style={{ color: inkDim }}>· {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}</span>
                       </span>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => startEditEx(ex)} style={tinyBtn}>
@@ -940,71 +658,32 @@ export default function App() {
         </div>
 
         {/* ---- Macros ---- */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div style={cardStyle}>
-            <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>
-              PROTEIN
-            </div>
+            <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>PROTEIN</div>
             <div style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
               {totalProtein.toFixed(0)}
-              <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}>
-                {" "}
-                / {PROTEIN_GOAL}g
-              </span>
+              <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}> / {PROTEIN_GOAL}g</span>
             </div>
-            <ProgressBar
-              value={totalProtein}
-              goal={PROTEIN_GOAL}
-              color={totalProtein >= PROTEIN_GOAL ? green : amber}
-            />
+            <ProgressBar value={totalProtein} goal={PROTEIN_GOAL} color={totalProtein >= PROTEIN_GOAL ? green : amber} />
           </div>
           <div style={cardStyle}>
-            <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>
-              CALORIES (est.)
-            </div>
+            <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>CALORIES (est.)</div>
             <div style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
               {totalKcal.toFixed(0)}
-              <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}>
-                {" "}
-                / {KCAL_GOAL}
-              </span>
+              <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}> / {KCAL_GOAL}</span>
             </div>
-            <ProgressBar
-              value={totalKcal}
-              goal={KCAL_GOAL}
-              color={totalKcal > KCAL_GOAL ? red : green}
-            />
+            <ProgressBar value={totalKcal} goal={KCAL_GOAL} color={totalKcal > KCAL_GOAL ? red : green} />
           </div>
         </div>
 
         {/* ---- Add food ---- */}
         <div style={sectionLabel}>ADD FOOD</div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 8,
-            marginBottom: 10,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 10 }}>
           {foods.map((f) => (
-            <button
-              key={f.id}
-              className="foodbtn"
-              onClick={() => addFood(f)}
-              style={foodBtnStyle}
-            >
+            <button key={f.id} className="foodbtn" onClick={() => addFood(f)} style={foodBtnStyle}>
               <span style={{ fontSize: 13 }}>{f.name}</span>
-              <span style={{ fontSize: 12, color: amber, fontWeight: 600 }}>
-                {f.protein}g
-              </span>
+              <span style={{ fontSize: 12, color: amber, fontWeight: 600 }}>{f.protein}g</span>
             </button>
           ))}
         </div>
@@ -1012,156 +691,68 @@ export default function App() {
         {!showCustomFood ? (
           <button
             onClick={() => setShowCustomFood(true)}
-            style={{
-              ...foodBtnStyle,
-              width: "100%",
-              justifyContent: "center",
-              gap: 6,
-              marginBottom: 10,
-              borderStyle: "dashed",
-            }}
+            style={{ ...foodBtnStyle, width: "100%", justifyContent: "center", gap: 6, marginBottom: 10, borderStyle: "dashed" }}
           >
             + Custom item
           </button>
         ) : (
-          <div
-            style={{
-              ...cardStyle,
-              marginBottom: 10,
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
-            <input
-              placeholder="Food name"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              style={inputStyle}
-            />
+          <div style={{ ...cardStyle, marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <input placeholder="Food name" value={customName} onChange={(e) => setCustomName(e.target.value)} style={inputStyle} />
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                placeholder="Protein (g)"
-                type="number"
-                value={customProtein}
-                onChange={(e) => setCustomProtein(e.target.value)}
-                style={inputStyle}
-              />
-              <input
-                placeholder="Kcal (optional)"
-                type="number"
-                value={customKcal}
-                onChange={(e) => setCustomKcal(e.target.value)}
-                style={inputStyle}
-              />
+              <input placeholder="Protein (g)" type="number" value={customProtein} onChange={(e) => setCustomProtein(e.target.value)} style={inputStyle} />
+              <input placeholder="Kcal (optional)" type="number" value={customKcal} onChange={(e) => setCustomKcal(e.target.value)} style={inputStyle} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={addCustomFood}
-                style={{ ...primaryBtn, flex: 1 }}
-              >
+              <button onClick={addCustomFood} style={{ ...primaryBtn, flex: 1 }}>
                 Log once
               </button>
-              <button
-                onClick={addFoodToLibrary}
-                style={{ ...secondaryBtn, flex: 1 }}
-              >
+              <button onClick={addFoodToLibrary} style={{ ...secondaryBtn, flex: 1 }}>
                 Save to list
               </button>
-              <button
-                onClick={() => setShowCustomFood(false)}
-                style={{ ...secondaryBtn, flex: 1 }}
-              >
+              <button onClick={() => setShowCustomFood(false)} style={{ ...secondaryBtn, flex: 1 }}>
                 Cancel
               </button>
             </div>
           </div>
         )}
 
-        <button
-          onClick={() => setShowManageFoods((v) => !v)}
-          style={{ ...tinyBtn, width: "100%", marginBottom: 20 }}
-        >
+        <button onClick={() => setShowManageFoods((v) => !v)} style={{ ...tinyBtn, width: "100%", marginBottom: 20 }}>
           {showManageFoods ? "Hide" : "Manage"} food list
         </button>
         {showManageFoods && (
           <div style={{ border: `1px solid ${line}`, marginBottom: 20 }}>
             {foods.map((f, idx) => (
-              <div
-                key={f.id}
-                style={{
-                  padding: "8px 10px",
-                  borderBottom:
-                    idx < foods.length - 1 ? `1px solid ${line}` : "none",
-                }}
-              >
+              <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < foods.length - 1 ? `1px solid ${line}` : "none" }}>
                 {editingFoodId === f.id ? (
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                  >
-                    <input
-                      value={foodEdit.name}
-                      onChange={(e) =>
-                        setFoodEdit({ ...foodEdit, name: e.target.value })
-                      }
-                      style={smallInputStyle}
-                    />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <input value={foodEdit.name} onChange={(e) => setFoodEdit({ ...foodEdit, name: e.target.value })} style={smallInputStyle} />
                     <div style={{ display: "flex", gap: 6 }}>
                       <input
                         value={foodEdit.protein}
-                        onChange={(e) =>
-                          setFoodEdit({ ...foodEdit, protein: e.target.value })
-                        }
+                        onChange={(e) => setFoodEdit({ ...foodEdit, protein: e.target.value })}
                         style={{ ...smallInputStyle, width: 70 }}
                         placeholder="protein"
                       />
                       <input
                         value={foodEdit.kcal}
-                        onChange={(e) =>
-                          setFoodEdit({ ...foodEdit, kcal: e.target.value })
-                        }
+                        onChange={(e) => setFoodEdit({ ...foodEdit, kcal: e.target.value })}
                         style={{ ...smallInputStyle, width: 70 }}
                         placeholder="kcal"
                       />
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        onClick={() => saveEditFood(f.id)}
-                        style={{
-                          ...primaryBtn,
-                          flex: 1,
-                          padding: "6px 10px",
-                          fontSize: 12,
-                        }}
-                      >
+                      <button onClick={() => saveEditFood(f.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                         Save
                       </button>
-                      <button
-                        onClick={() => setEditingFoodId(null)}
-                        style={{
-                          ...secondaryBtn,
-                          flex: 1,
-                          padding: "6px 10px",
-                          fontSize: 12,
-                        }}
-                      >
+                      <button onClick={() => setEditingFoodId(null)} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 13 }}>
-                      {f.name}{" "}
-                      <span style={{ color: inkDim }}>
-                        · {f.protein}g · {f.kcal}kcal
-                      </span>
+                      {f.name} <span style={{ color: inkDim }}>· {f.protein}g · {f.kcal}kcal</span>
                     </span>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => startEditFood(f)} style={tinyBtn}>
@@ -1190,26 +781,13 @@ export default function App() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "10px 12px",
-                    borderBottom:
-                      idx < log.items.length - 1 ? `1px solid ${line}` : "none",
+                    borderBottom: idx < log.items.length - 1 ? `1px solid ${line}` : "none",
                   }}
                 >
                   <span style={{ fontSize: 14 }}>{item.name}</span>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 10 }}
-                  >
-                    <span style={{ fontSize: 13, color: amber }}>
-                      {item.protein}g
-                    </span>
-                    <button
-                      onClick={() => removeFood(item.id)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        padding: 4,
-                        color: inkDim,
-                      }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13, color: amber }}>{item.protein}g</span>
+                    <button onClick={() => removeFood(item.id)} style={{ background: "none", border: "none", padding: 4, color: inkDim }}>
                       ✕
                     </button>
                   </div>
@@ -1238,21 +816,12 @@ export default function App() {
                   padding: "10px 12px",
                   background: "none",
                   border: "none",
-                  borderBottom:
-                    idx < SUPPLEMENTS.length - 1 ? `1px solid ${line}` : "none",
+                  borderBottom: idx < SUPPLEMENTS.length - 1 ? `1px solid ${line}` : "none",
                   textAlign: "left",
                 }}
               >
                 <div>
-                  <div
-                    style={{
-                      fontSize: 14,
-                      color: done ? inkDim : ink,
-                      textDecoration: done ? "line-through" : "none",
-                    }}
-                  >
-                    {s.name}
-                  </div>
+                  <div style={{ fontSize: 14, color: done ? inkDim : ink, textDecoration: done ? "line-through" : "none" }}>{s.name}</div>
                   <div style={{ fontSize: 11, color: inkDim }}>{s.time}</div>
                 </div>
                 <div
@@ -1280,13 +849,7 @@ export default function App() {
         {/* ---- Weight ---- */}
         <div style={sectionLabel}>WEIGHT LOG</div>
         <div style={cardStyle}>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: last8Weights.length ? 16 : 0,
-            }}
-          >
+          <div style={{ display: "flex", gap: 8, marginBottom: last8Weights.length ? 16 : 0 }}>
             <input
               placeholder="kg, e.g. 89.4"
               type="number"
@@ -1301,19 +864,12 @@ export default function App() {
           </div>
           {last8Weights.length > 0 && (
             <div>
-              <svg
-                viewBox="0 0 300 80"
-                style={{ width: "100%", height: 80, overflow: "visible" }}
-              >
+              <svg viewBox="0 0 300 80" style={{ width: "100%", height: 80, overflow: "visible" }}>
                 <polyline
                   points={last8Weights
                     .map((w, i) => {
-                      const x =
-                        last8Weights.length > 1
-                          ? (i / (last8Weights.length - 1)) * 290 + 5
-                          : 150;
-                      const y =
-                        75 - ((w.weight - minW) / (maxW - minW || 1)) * 70;
+                      const x = last8Weights.length > 1 ? (i / (last8Weights.length - 1)) * 290 + 5 : 150;
+                      const y = 75 - ((w.weight - minW) / (maxW - minW || 1)) * 70;
                       return `${x},${y}`;
                     })
                     .join(" ")}
@@ -1322,43 +878,60 @@ export default function App() {
                   strokeWidth="2"
                 />
                 {last8Weights.map((w, i) => {
-                  const x =
-                    last8Weights.length > 1
-                      ? (i / (last8Weights.length - 1)) * 290 + 5
-                      : 150;
+                  const x = last8Weights.length > 1 ? (i / (last8Weights.length - 1)) * 290 + 5 : 150;
                   const y = 75 - ((w.weight - minW) / (maxW - minW || 1)) * 70;
-                  return (
-                    <circle key={w.date} cx={x} cy={y} r="3" fill={amber} />
-                  );
+                  return <circle key={w.date} cx={x} cy={y} r="3" fill={amber} />;
                 })}
               </svg>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 11,
-                  color: inkDim,
-                  marginTop: 4,
-                }}
-              >
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: inkDim, marginTop: 4 }}>
                 <span>{last8Weights[0]!.weight}kg</span>
-                <span>
-                  {last8Weights[last8Weights.length - 1]!.weight}kg latest
-                </span>
+                <span>{last8Weights[last8Weights.length - 1]!.weight}kg latest</span>
               </div>
             </div>
           )}
         </div>
 
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 11,
-            color: inkDim,
-            marginTop: 24,
-            paddingBottom: 8,
-          }}
-        >
+        {/* ---- Water ---- */}
+        <div style={{ ...sectionLabel, marginTop: 20 }}>
+          WATER · {(waterTotal / 1000).toFixed(2)}L today
+        </div>
+        <div style={cardStyle}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            {WATER_PRESETS.map((ml) => (
+              <button key={ml} onClick={() => logWater(ml)} style={{ ...secondaryBtn, flex: 1, textAlign: "center" }}>
+                +{ml}ml
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              placeholder="Custom ml"
+              type="number"
+              value={customWaterMl}
+              onChange={(e) => setCustomWaterMl(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button onClick={() => logWater(parseInt(customWaterMl) || 0)} style={primaryBtn}>
+              Log
+            </button>
+          </div>
+          {waterEntries.length > 0 && (
+            <div style={{ marginTop: 12, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
+              {waterEntries.map((w) => (
+                <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                  <span style={{ fontSize: 13, color: inkDim }}>
+                    {new Date(w.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · {w.amountMl}ml
+                  </span>
+                  <button onClick={() => removeWater(w.id)} style={{ background: "none", border: "none", padding: 4, color: inkDim }}>
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ textAlign: "center", fontSize: 11, color: inkDim, marginTop: 24, paddingBottom: 8 }}>
           90kg → cut · 2700-2800 kcal · 120g protein · PPL ×2
         </div>
       </div>
