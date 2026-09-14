@@ -29,6 +29,9 @@ type Exercise = {
   dayType: string;
   defaultSets: number;
   defaultReps: string;
+  restSeconds: number | null;
+  variant: string;
+  block: string;
   archived: boolean;
 };
 type ExerciseLogRow = {
@@ -41,9 +44,18 @@ type ExerciseLogRow = {
   name: string | null;
   defaultSets: number | null;
   defaultReps: string | null;
+  restSeconds: number | null;
+  block: string | null;
 };
 type DayType = "Push" | "Pull" | "Legs" | "Rest";
-type WorkoutState = { dayType: DayType; status: string; suggested: boolean; log: ExerciseLogRow[] };
+type Variant = "strength" | "hypertrophy" | null;
+type WorkoutState = {
+  dayType: DayType;
+  status: string;
+  suggested: boolean;
+  variant: Variant;
+  log: ExerciseLogRow[];
+};
 
 const ink = "#EDEAE3",
   inkDim = "#9A968C",
@@ -94,7 +106,13 @@ export default function App() {
   const [foods, setFoods] = useState<Food[]>([]);
   const [exerciseOptions, setExerciseOptions] = useState<Exercise[]>([]);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
-  const [workout, setWorkout] = useState<WorkoutState>({ dayType: "Push", status: "planned", suggested: true, log: [] });
+  const [workout, setWorkout] = useState<WorkoutState>({
+    dayType: "Push",
+    status: "planned",
+    suggested: true,
+    variant: "strength",
+    log: [],
+  });
 
   const [customName, setCustomName] = useState("");
   const [customProtein, setCustomProtein] = useState("");
@@ -109,6 +127,7 @@ export default function App() {
   const [customExReps, setCustomExReps] = useState("8-12");
   const [showCustomExercise, setShowCustomExercise] = useState(false);
   const [showManageExercises, setShowManageExercises] = useState(false);
+  const [showFullProgram, setShowFullProgram] = useState(false);
   const [editingExId, setEditingExId] = useState<number | null>(null);
   const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12" });
 
@@ -137,8 +156,8 @@ export default function App() {
     const res = await fetch(`/api/workout?date=${d}`);
     const data: WorkoutState = await res.json();
     setWorkout(data);
-    if (data.dayType !== "Rest") {
-      const exRes = await fetch(`/api/exercises?dayType=${data.dayType}`);
+    if (data.dayType !== "Rest" && data.variant) {
+      const exRes = await fetch(`/api/exercises?dayType=${data.dayType}&variant=${data.variant}`);
       setExerciseOptions(await exRes.json());
     } else {
       setExerciseOptions([]);
@@ -299,7 +318,10 @@ export default function App() {
     const row = await res.json();
     setWorkout((prev) => ({
       ...prev,
-      log: [...prev.log, { ...row, name: ex.name, defaultSets: ex.defaultSets, defaultReps: ex.defaultReps }],
+      log: [
+        ...prev.log,
+        { ...row, name: ex.name, defaultSets: ex.defaultSets, defaultReps: ex.defaultReps, restSeconds: ex.restSeconds, block: ex.block },
+      ],
     }));
   };
 
@@ -448,6 +470,12 @@ export default function App() {
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>
                   {workout.dayType === "Rest" ? "Rest day" : `${workout.dayType} day`}
+                  {workout.variant && (
+                    <span style={{ fontSize: 11, color: amber, fontWeight: 400 }}>
+                      {" "}
+                      · {workout.variant === "strength" ? "Strength" : "Hypertrophy"}
+                    </span>
+                  )}
                   {workout.suggested && <span style={{ fontSize: 11, color: inkDim, fontWeight: 400 }}> · suggested</span>}
                   {workout.status === "done" && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}> · done</span>}
                   {workout.status === "skipped" && <span style={{ fontSize: 11, color: red, fontWeight: 400 }}> · skipped</span>}
@@ -583,16 +611,118 @@ export default function App() {
           )}
         </div>
 
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           <button
             onClick={() => {
               setShowManageExercises((v) => !v);
               if (!showManageExercises) loadAllExercises();
             }}
-            style={{ ...tinyBtn, width: "100%" }}
+            style={{ ...tinyBtn, flex: 1 }}
           >
             {showManageExercises ? "Hide" : "Manage"} exercise library
           </button>
+          <button
+            onClick={() => {
+              setShowFullProgram(true);
+              loadAllExercises();
+            }}
+            style={{ ...tinyBtn, flex: 1 }}
+          >
+            Full program table
+          </button>
+        </div>
+
+        {showFullProgram && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "#000000cc",
+              zIndex: 10,
+              padding: "20px 12px",
+              overflowY: "auto",
+            }}
+          >
+            <div style={{ maxWidth: 640, margin: "0 auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontSize: 18, fontWeight: 600 }}>Full PPL Program</div>
+                <button onClick={() => setShowFullProgram(false)} style={navBtn}>
+                  ✕
+                </button>
+              </div>
+              {(
+                [
+                  ["Push", "strength", "Push · Strength"],
+                  ["Pull", "strength", "Pull · Strength"],
+                  ["Legs", "strength", "Legs · Strength"],
+                  ["Push", "hypertrophy", "Push · Hypertrophy"],
+                  ["Pull", "hypertrophy", "Pull · Hypertrophy"],
+                  ["Legs", "hypertrophy", "Legs · Hypertrophy"],
+                ] as [string, string, string][]
+              ).map(([dt, v, label]) => {
+                const sessionExercises = allExercises
+                  .filter((ex) => !ex.archived && ex.dayType === dt && (ex.variant === v || ex.variant === "standard"))
+                  .sort((a, b) => {
+                    const order: Record<string, number> = { main: 0, core: 1, conditioning: 2 };
+                    return (order[a.block] ?? 0) - (order[b.block] ?? 0);
+                  });
+                return (
+                  <div key={label} style={{ marginBottom: 20 }}>
+                    <div
+                      style={{
+                        background: amber + "22",
+                        color: amber,
+                        fontWeight: 600,
+                        padding: 8,
+                        fontSize: 13,
+                        border: `1px solid ${line}`,
+                      }}
+                    >
+                      {label}
+                    </div>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr>
+                          {["Exercise", "Sets", "Reps", "Rest"].map((h) => (
+                            <th
+                              key={h}
+                              style={{
+                                border: `1px solid ${line}`,
+                                padding: "6px 8px",
+                                textAlign: "left",
+                                background: bg2,
+                                color: inkDim,
+                                fontSize: 11,
+                              }}
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionExercises.map((ex) => (
+                          <tr key={ex.id}>
+                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
+                              {ex.name}
+                              {ex.block !== "main" && <span style={{ color: inkDim }}> · {ex.block}</span>}
+                            </td>
+                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>{ex.defaultSets}</td>
+                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>{ex.defaultReps}</td>
+                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
+                              {ex.restSeconds ? `${ex.restSeconds} sec` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div style={{ marginBottom: 20 }}>
           {showManageExercises && (
             <div style={{ border: `1px solid ${line}`, marginTop: 8 }}>
               {allExercises.map((ex, idx) => (

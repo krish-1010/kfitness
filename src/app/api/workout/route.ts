@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { workoutSessions, exerciseLog, exercises } from "@/lib/schema";
-import { resolveDayType } from "@/lib/rotation";
+import { resolveDayType, resolveVariant } from "@/lib/rotation";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date");
@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   }
 
   const session = await resolveDayType(date);
+  const variant = session.dayType === "Rest" ? null : await resolveVariant(session.dayType, date);
 
   const log = await db
     .select({
@@ -23,12 +24,14 @@ export async function GET(req: NextRequest) {
       name: exercises.name,
       defaultSets: exercises.defaultSets,
       defaultReps: exercises.defaultReps,
+      restSeconds: exercises.restSeconds,
+      block: exercises.block,
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))
     .where(eq(exerciseLog.date, date));
 
-  return NextResponse.json({ ...session, log });
+  return NextResponse.json({ ...session, variant, log });
 }
 
 // Commits a session row: marks it done/rest/skipped, or overrides the

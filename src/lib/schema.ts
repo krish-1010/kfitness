@@ -45,6 +45,15 @@ export const exercises = pgTable("exercises", {
   dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs'
   defaultSets: integer("default_sets").notNull().default(3),
   defaultReps: text("default_reps").notNull().default("8-12"),
+  restSeconds: integer("rest_seconds"),
+  // 'strength' | 'hypertrophy' — which weekly pass this belongs to, for
+  // PPL x2 alternation. 'standard' means it shows on every session for its
+  // dayType regardless of which pass is active (used for core/conditioning
+  // add-ons that aren't part of the strength/hypertrophy alternation).
+  variant: text("variant").notNull().default("standard"),
+  // 'main' | 'core' | 'conditioning' — groups exercises within a session
+  // for display, independent of the strength/hypertrophy variant.
+  block: text("block").notNull().default("main"),
   archived: boolean("archived").notNull().default(false),
 });
 

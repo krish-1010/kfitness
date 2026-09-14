@@ -58,3 +58,26 @@ export async function resolveDayType(
   const suggested = lastCompleted ? nextInCycle(lastCompleted.dayType) : "Push";
   return { dayType: suggested, status: "planned", suggested: true };
 }
+
+/**
+ * Resolves the strength/hypertrophy variant for date D's day type:
+ * counts COMPLETED sessions of that same day type before D, alternating
+ * strength (0th, 2nd, 4th...) and hypertrophy (1st, 3rd, 5th...). Same
+ * skip-tolerant principle as resolveDayType — only completed sessions
+ * advance it, so a skipped or rest day never desyncs the strength/
+ * hypertrophy alternation either.
+ */
+export async function resolveVariant(dayType: string, date: string): Promise<"strength" | "hypertrophy"> {
+  const completed = await db
+    .select()
+    .from(workoutSessions)
+    .where(
+      and(
+        eq(workoutSessions.dayType, dayType),
+        eq(workoutSessions.status, "done"),
+        lt(workoutSessions.date, date)
+      )
+    );
+
+  return completed.length % 2 === 0 ? "strength" : "hypertrophy";
+}
