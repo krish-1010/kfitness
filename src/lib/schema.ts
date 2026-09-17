@@ -31,6 +31,16 @@ export const supplementLog = pgTable(
   })
 );
 
+// User-editable supplement list. supplementLog.supplementId stores this
+// table's id as text (the column's existing type), so no column type change
+// was needed on supplement_log to make this switch from a hardcoded list.
+export const supplements = pgTable("supplements", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  time: text("time").notNull().default(""),
+  archived: boolean("archived").notNull().default(false),
+});
+
 // One row per date (matches the original weights array, deduped by date on write).
 export const weights = pgTable("weights", {
   date: text("date").primaryKey(),
@@ -54,6 +64,8 @@ export const exercises = pgTable("exercises", {
   // 'main' | 'core' | 'conditioning' — groups exercises within a session
   // for display, independent of the strength/hypertrophy variant.
   block: text("block").notNull().default("main"),
+  muscleGroup: text("muscle_group").notNull().default(""),
+  videoUrl: text("video_url"),
   archived: boolean("archived").notNull().default(false),
 });
 

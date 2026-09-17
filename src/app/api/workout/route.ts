@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
       defaultReps: exercises.defaultReps,
       restSeconds: exercises.restSeconds,
       block: exercises.block,
+      muscleGroup: exercises.muscleGroup,
+      videoUrl: exercises.videoUrl,
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))

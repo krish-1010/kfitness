@@ -17,77 +17,94 @@ type Seed = {
   restSeconds: number;
   variant: "strength" | "hypertrophy" | "standard";
   block?: "main" | "core" | "conditioning";
+  muscleGroup: string;
+  // Intentionally left null for the whole seed — real demo video links need
+  // to be sourced and verified per exercise, not guessed. Add them via the
+  // "Manage exercise library" panel in the app, or ask for a batch to be
+  // researched separately.
+  videoUrl?: null;
 };
 
 const PROGRAM: Seed[] = [
   // Push — Strength
-  { name: "Barbell Bench Press", dayType: "Push", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength" },
-  { name: "Machine Shoulder Press", dayType: "Push", defaultSets: 3, defaultReps: "8-10", restSeconds: 75, variant: "strength" },
-  { name: "Pec Deck Fly", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength" },
-  { name: "DB Lateral Raises", dayType: "Push", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength" },
-  { name: "Tricep Pushdowns (cable)", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength" },
-  { name: "DB Overhead Tricep Extension", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength" },
-
-  // Pull — Strength
-  { name: "Lat Pulldown", dayType: "Pull", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength" },
-  { name: "Seated Cable Row", dayType: "Pull", defaultSets: 4, defaultReps: "8-10", restSeconds: 75, variant: "strength" },
-  { name: "DB Single-Arm Row", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength" },
-  { name: "DB Bicep Curls", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength" },
-  { name: "DB Hammer Curls", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength" },
-  { name: "Machine Wrist Curls", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "strength" },
-
-  // Legs — Strength
-  { name: "Smith Machine Squat", dayType: "Legs", defaultSets: 4, defaultReps: "6-8", restSeconds: 120, variant: "strength" },
-  { name: "Leg Press", dayType: "Legs", defaultSets: 3, defaultReps: "8-10", restSeconds: 90, variant: "strength" },
-  { name: "DB Romanian Deadlift", dayType: "Legs", defaultSets: 3, defaultReps: "8-10", restSeconds: 90, variant: "strength" },
-  { name: "Leg Curl", dayType: "Legs", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength" },
-  { name: "Leg Extension", dayType: "Legs", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength" },
-  { name: "Calf Raises", dayType: "Legs", defaultSets: 4, defaultReps: "15-20", restSeconds: 30, variant: "strength" },
+  { name: "Barbell Bench Press", dayType: "Push", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength", muscleGroup: "Chest · Mid" },
+  { name: "Machine Shoulder Press", dayType: "Push", defaultSets: 3, defaultReps: "8-10", restSeconds: 75, variant: "strength", muscleGroup: "Shoulders · Front" },
+  { name: "Pec Deck Fly", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength", muscleGroup: "Chest · Mid" },
+  { name: "DB Lateral Raises", dayType: "Push", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength", muscleGroup: "Shoulders · Side" },
+  { name: "Tricep Pushdowns (cable)", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength", muscleGroup: "Triceps · Lateral" },
+  { name: "DB Overhead Tricep Extension", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength", muscleGroup: "Triceps · Long Head" },
 
   // Push — Hypertrophy
-  { name: "Machine Chest Press", dayType: "Push", defaultSets: 4, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy" },
-  { name: "Incline DB Press", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "hypertrophy" },
-  { name: "DB Front Raises", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy" },
-  { name: "Pec Deck Fly (Hyper)", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy" },
-  { name: "Tricep Pushdowns (Hyper)", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy" },
-  { name: "Both-Arm DB Extension", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy" },
+  { name: "Machine Chest Press", dayType: "Push", defaultSets: 4, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Chest · Mid" },
+  { name: "Incline DB Press", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Chest · Upper" },
+  { name: "DB Front Raises", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Shoulders · Front" },
+  { name: "Pec Deck Fly (Hyper)", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Chest · Mid" },
+  { name: "Tricep Pushdowns (Hyper)", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Triceps · Lateral" },
+  { name: "Both-Arm DB Extension", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Triceps · Long Head" },
+  { name: "Cable Crossover (Low-to-High)", dayType: "Push", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Chest · Lower/Inner" },
+
+  // Pull — Strength
+  { name: "Lat Pulldown", dayType: "Pull", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength", muscleGroup: "Back · Lats" },
+  { name: "Seated Cable Row", dayType: "Pull", defaultSets: 4, defaultReps: "8-10", restSeconds: 75, variant: "strength", muscleGroup: "Back · Mid/Thickness" },
+  { name: "DB Single-Arm Row", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength", muscleGroup: "Back · Mid/Thickness" },
+  { name: "DB Bicep Curls", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength", muscleGroup: "Biceps" },
+  { name: "DB Hammer Curls", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength", muscleGroup: "Biceps · Brachialis" },
+  { name: "Machine Wrist Curls", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "strength", muscleGroup: "Forearms" },
+  { name: "Face Pulls", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength", muscleGroup: "Shoulders · Rear" },
+
+  // Pull — Strength, core block (kept off the hypertrophy pass since that
+  // one already carries the full conditioning circuit)
+  { name: "Plank", dayType: "Pull", defaultSets: 3, defaultReps: "30 sec", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Anterior" },
+  { name: "Leg Raises", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Anterior" },
+  { name: "Pelvic Bridges", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Posterior/Glutes" },
+  { name: "Prone Back Extension", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Lower Back · Erectors" },
 
   // Pull — Hypertrophy
-  { name: "Seated Cable Row (Hyper)", dayType: "Pull", defaultSets: 4, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy" },
-  { name: "Lat Pulldown (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy" },
-  { name: "DB Single-Arm Row (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy" },
-  { name: "DB Bicep Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy" },
-  { name: "DB Hammer Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy" },
-  { name: "Machine Wrist Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15-20", restSeconds: 30, variant: "hypertrophy" },
+  { name: "Seated Cable Row (Hyper)", dayType: "Pull", defaultSets: 4, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Back · Mid/Thickness" },
+  { name: "Lat Pulldown (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Back · Lats" },
+  { name: "DB Single-Arm Row (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Back · Mid/Thickness" },
+  { name: "DB Bicep Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Biceps" },
+  { name: "DB Hammer Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Biceps · Brachialis" },
+  { name: "Machine Wrist Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15-20", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Forearms" },
+  { name: "DB Shrugs", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Traps" },
+  { name: "Incline DB Curl", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Biceps · Long Head" },
+
+  // Pull — Hypertrophy, conditioning block (replaces steady-state cardio
+  // that day only, once a week)
+  { name: "Jumping Jacks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  { name: "High Knees", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  { name: "Buttkicks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  { name: "Step-ups", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  { name: "Mountain Climbers", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  { name: "Inch Worm", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+
+  // Legs — Strength
+  { name: "Smith Machine Squat", dayType: "Legs", defaultSets: 4, defaultReps: "6-8", restSeconds: 120, variant: "strength", muscleGroup: "Quads" },
+  { name: "Leg Press", dayType: "Legs", defaultSets: 3, defaultReps: "8-10", restSeconds: 90, variant: "strength", muscleGroup: "Quads" },
+  { name: "DB Romanian Deadlift", dayType: "Legs", defaultSets: 3, defaultReps: "8-10", restSeconds: 90, variant: "strength", muscleGroup: "Hamstrings" },
+  { name: "Leg Curl", dayType: "Legs", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength", muscleGroup: "Hamstrings" },
+  { name: "Leg Extension", dayType: "Legs", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength", muscleGroup: "Quads" },
+  { name: "Calf Raises", dayType: "Legs", defaultSets: 4, defaultReps: "15-20", restSeconds: 30, variant: "strength", muscleGroup: "Calves" },
 
   // Legs — Hypertrophy
-  { name: "Leg Press (Hyper)", dayType: "Legs", defaultSets: 4, defaultReps: "12-15", restSeconds: 75, variant: "hypertrophy" },
-  { name: "Smith Machine Squat (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "10-12", restSeconds: 75, variant: "hypertrophy" },
-  { name: "Leg Extension (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy" },
-  { name: "Leg Curl (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy" },
-  { name: "DB Romanian Deadlift (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "12", restSeconds: 60, variant: "hypertrophy" },
-  { name: "Calf Raises (Hyper)", dayType: "Legs", defaultSets: 4, defaultReps: "20", restSeconds: 30, variant: "hypertrophy" },
+  { name: "Leg Press (Hyper)", dayType: "Legs", defaultSets: 4, defaultReps: "12-15", restSeconds: 75, variant: "hypertrophy", muscleGroup: "Quads" },
+  { name: "Smith Machine Squat (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "10-12", restSeconds: 75, variant: "hypertrophy", muscleGroup: "Quads" },
+  { name: "Leg Extension (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Quads" },
+  { name: "Leg Curl (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Hamstrings" },
+  { name: "DB Romanian Deadlift (Hyper)", dayType: "Legs", defaultSets: 3, defaultReps: "12", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Hamstrings" },
+  { name: "Calf Raises (Hyper)", dayType: "Legs", defaultSets: 4, defaultReps: "20", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Calves" },
 
-  // Core — attached to Pull, 'standard' variant so it shows on BOTH Pull
-  // passes (2x/week), not gated to just strength or hypertrophy.
-  { name: "Plank", dayType: "Pull", defaultSets: 3, defaultReps: "30 sec", restSeconds: 25, variant: "standard", block: "core" },
-  { name: "Leg Raises", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "standard", block: "core" },
-  { name: "Pelvic Bridges", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "standard", block: "core" },
-
-  // Conditioning — attached to Pull-Hypertrophy only (the lighter session),
-  // replacing that day's steady-state cardio, once a week.
-  { name: "Jumping Jacks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
-  { name: "High Knees", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
-  { name: "Buttkicks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
-  { name: "Step-ups", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
-  { name: "Mountain Climbers", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
-  { name: "Inch Worm", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning" },
+  // Legs — both passes. [Assumption] your gym has a hip adduction/abduction
+  // machine — wasn't on the original card or confirmed separately. If it
+  // doesn't, swap these for banded lateral walks or cable hip adduction.
+  { name: "Hip Adduction Machine", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "standard", muscleGroup: "Adductors" },
+  { name: "Hip Abduction Machine", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "standard", muscleGroup: "Abductors" },
 ];
 
 async function run() {
-  // Archive whatever's currently in the library (the old generic starter
-  // set) rather than deleting — exercise_log rows reference exerciseId
-  // directly, so archiving keeps any already-logged history resolvable.
+  // Archive whatever's currently in the library rather than deleting —
+  // exercise_log rows reference exerciseId directly, so archiving keeps
+  // any already-logged history resolvable.
   const existing = await db.select().from(schema.exercises).where(eq(schema.exercises.archived, false));
   if (existing.length > 0) {
     await db.update(schema.exercises).set({ archived: true }).where(eq(schema.exercises.archived, false));
@@ -103,9 +120,11 @@ async function run() {
       restSeconds: p.restSeconds,
       variant: p.variant,
       block: p.block ?? "main",
+      muscleGroup: p.muscleGroup,
+      videoUrl: null,
     }))
   );
-  console.log(`Seeded ${PROGRAM.length} exercises (confirmed PPL x2 program + core + conditioning)`);
+  console.log(`Seeded ${PROGRAM.length} exercises (full muscle-coverage PPL x2 program)`);
 }
 
 run()

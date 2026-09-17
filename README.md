@@ -35,14 +35,16 @@ SQL needed.
 npm run dev
 ```
 
-Visit `http://localhost:3000` — the browser will prompt for Basic Auth.
-Username: anything. Password: whatever you set as `APP_PASSWORD`.
+Visit `http://localhost:3000` — it redirects to `/login`. Enter
+`APP_PASSWORD`. The session cookie stays valid for 30 days, no repeated
+browser prompts.
 
 ## 4. Deploy (free, permanent)
 
 1. Push this repo to GitHub.
 2. [vercel.com](https://vercel.com) → **New Project** → import the repo.
-3. In **Environment Variables**, add `DATABASE_URL` and `APP_PASSWORD`
+3. In **Environment Variables**, add `DATABASE_URL`, `APP_PASSWORD`, and
+   `SESSION_SECRET`
    (same values as `.env.local`).
 4. Deploy.
 
