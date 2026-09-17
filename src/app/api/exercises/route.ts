@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { exercises } from "@/lib/schema";
+import { getLinkCounts } from "@/lib/exerciseLinks";
 
 export async function GET(req: NextRequest) {
   const dayType = req.nextUrl.searchParams.get("dayType");
@@ -21,12 +22,13 @@ export async function GET(req: NextRequest) {
     .from(exercises)
     .where(and(...conditions));
 
-  return NextResponse.json(rows);
+  const linkCounts = await getLinkCounts(rows.map((r) => r.id));
+  return NextResponse.json(rows.map((r) => ({ ...r, linkCount: linkCounts[r.id] ?? 0 })));
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, videoUrl } = body ?? {};
+  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup } = body ?? {};
 
   if (!name || !dayType || !["Push", "Pull", "Legs"].includes(dayType)) {
     return NextResponse.json(
@@ -46,9 +48,8 @@ export async function POST(req: NextRequest) {
       variant: variant || "standard",
       block: block || "main",
       muscleGroup: typeof muscleGroup === "string" ? muscleGroup : "",
-      videoUrl: typeof videoUrl === "string" && videoUrl ? videoUrl : null,
     })
     .returning();
 
-  return NextResponse.json(row, { status: 201 });
+  return NextResponse.json({ ...row, linkCount: 0 }, { status: 201 });
 }

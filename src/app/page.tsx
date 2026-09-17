@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type MouseEvent } from "react";
+import Body from "react-muscle-highlighter";
 import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
+import { muscleGroupsToBodyData } from "@/lib/muscleSlug";
 
 // Formats a Date using its LOCAL calendar fields, never toISOString() (which
 // converts to UTC first). In any positive-UTC-offset timezone like IST,
@@ -34,7 +36,7 @@ type Exercise = {
   variant: string;
   block: string;
   muscleGroup: string;
-  videoUrl: string | null;
+  linkCount: number;
   archived: boolean;
 };
 type ExerciseLogRow = {
@@ -50,8 +52,9 @@ type ExerciseLogRow = {
   restSeconds: number | null;
   block: string | null;
   muscleGroup: string | null;
-  videoUrl: string | null;
+  linkCount: number;
 };
+type ExerciseLink = { id: number; label: string; url: string };
 type DayType = "Push" | "Pull" | "Legs" | "Rest";
 type Variant = "strength" | "hypertrophy" | null;
 type WorkoutState = {
@@ -106,18 +109,145 @@ function MuscleBadge({ muscleGroup }: { muscleGroup: string }) {
   );
 }
 
-function VideoLink({ videoUrl }: { videoUrl: string | null }) {
-  if (!videoUrl) return null;
+// Shows a "▶" affordance that lazily fetches an exercise's tutorial links on
+// first click and opens a small popover. In view contexts (log rows,
+// quick-add) it's hidden entirely when there are zero links, to avoid a sea
+// of dead buttons — in manage mode it always shows, since that's how you add
+// the first one.
+function TutorialButton({
+  exerciseId,
+  linkCount,
+  manageMode,
+}: {
+  exerciseId: number;
+  linkCount: number;
+  manageMode?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [links, setLinks] = useState<ExerciseLink[] | null>(null);
+  const [newLabel, setNewLabel] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+
+  if (linkCount === 0 && !manageMode) return null;
+
+  const toggle = async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!open && links === null) {
+      const res = await fetch(`/api/exercises/${exerciseId}/links`);
+      setLinks(await res.json());
+    }
+    setOpen((v) => !v);
+  };
+
+  const removeLink = async (linkId: number) => {
+    setLinks((prev) => (prev ?? []).filter((l) => l.id !== linkId));
+    await fetch(`/api/exercises/${exerciseId}/links/${linkId}`, { method: "DELETE" });
+  };
+
+  const addLink = async () => {
+    if (!newUrl.trim()) return;
+    const res = await fetch(`/api/exercises/${exerciseId}/links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newLabel.trim(), url: newUrl.trim() }),
+    });
+    const row = await res.json();
+    setLinks((prev) => [...(prev ?? []), row]);
+    setNewLabel("");
+    setNewUrl("");
+  };
+
   return (
-    <a
-      href={videoUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      style={{ fontSize: 10, color: amber, textDecoration: "underline", whiteSpace: "nowrap" }}
-    >
-      ▶ How to
-    </a>
+    <span style={{ position: "relative" }}>
+      <button
+        onClick={toggle}
+        style={{ fontSize: 10, color: amber, background: "none", border: "none", padding: 0, whiteSpace: "nowrap", cursor: "pointer" }}
+      >
+        ▶{linkCount > 0 ? ` ${linkCount}` : ""}
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            top: "100%",
+            right: 0,
+            zIndex: 5,
+            background: bg2,
+            border: `1px solid ${line}`,
+            padding: 8,
+            minWidth: 180,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {links === null ? (
+            <span style={{ fontSize: 11, color: inkDim }}>Loading…</span>
+          ) : links.length === 0 ? (
+            <span style={{ fontSize: 11, color: inkDim }}>No tutorial links yet</span>
+          ) : (
+            links.map((l) => (
+              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: amber }}>
+                  {l.label || l.url}
+                </a>
+                {manageMode && (
+                  <button onClick={() => removeLink(l.id)} style={{ background: "none", border: "none", color: inkDim, fontSize: 11, padding: 2 }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+          {manageMode && (
+            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4, borderTop: `1px solid ${line}`, paddingTop: 4 }}>
+              <input
+                placeholder="Label (e.g. Form check)"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
+                style={{ fontSize: 11, padding: "4px 6px", background: bg, border: `1px solid ${line}`, color: ink }}
+              />
+              <input
+                placeholder="URL"
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                style={{ fontSize: 11, padding: "4px 6px", background: bg, border: `1px solid ${line}`, color: ink }}
+              />
+              <button onClick={addLink} style={{ fontSize: 11, padding: "4px 6px", background: "none", border: `1px solid ${amber}`, color: amber }}>
+                + Add link
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </span>
+  );
+}
+
+// Compact front/back body diagram, collapsed behind a toggle so it doesn't
+// eat screen real estate by default — highlights whichever muscle groups
+// today's exercises (logged + suggested) actually cover.
+function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
+  const [shown, setShown] = useState(false);
+  const data = muscleGroupsToBodyData(muscleGroups);
+  if (data.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button
+        onClick={() => setShown((v) => !v)}
+        style={{ fontSize: 11, color: inkDim, background: "none", border: `1px solid ${line}`, padding: "4px 8px", cursor: "pointer" }}
+      >
+        {shown ? "Hide" : "👁 Muscles worked today"}
+      </button>
+      {shown && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 8 }}>
+          <Body data={data} side="front" gender="male" scale={0.32} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg2} border={line} />
+          <Body data={data} side="back" gender="male" scale={0.32} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg2} border={line} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -212,6 +342,7 @@ export default function App() {
   const [customKcal, setCustomKcal] = useState("");
   const [showCustomFood, setShowCustomFood] = useState(false);
   const [showManageFoods, setShowManageFoods] = useState(false);
+  const [foodQuery, setFoodQuery] = useState("");
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
   const [foodEdit, setFoodEdit] = useState({ name: "", protein: "", kcal: "" });
   const [showManageSupplements, setShowManageSupplements] = useState(false);
@@ -227,7 +358,9 @@ export default function App() {
   const [showManageExercises, setShowManageExercises] = useState(false);
   const [showFullProgram, setShowFullProgram] = useState(false);
   const [editingExId, setEditingExId] = useState<number | null>(null);
-  const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12", muscleGroup: "", videoUrl: "" });
+  const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12", muscleGroup: "" });
+  const [exerciseQuery, setExerciseQuery] = useState("");
+  const [expandedDayTypes, setExpandedDayTypes] = useState<Set<string>>(new Set());
 
   const [weightInput, setWeightInput] = useState("");
   const [waterEntries, setWaterEntries] = useState<WaterEntry[]>([]);
@@ -485,7 +618,7 @@ export default function App() {
           restSeconds: ex.restSeconds,
           block: ex.block,
           muscleGroup: ex.muscleGroup,
-          videoUrl: ex.videoUrl,
+          linkCount: ex.linkCount,
         },
       ],
     }));
@@ -534,7 +667,6 @@ export default function App() {
       defaultSets: String(ex.defaultSets),
       defaultReps: ex.defaultReps,
       muscleGroup: ex.muscleGroup,
-      videoUrl: ex.videoUrl ?? "",
     });
   };
 
@@ -548,11 +680,11 @@ export default function App() {
         defaultSets: parseInt(exEdit.defaultSets) || 3,
         defaultReps: exEdit.defaultReps,
         muscleGroup: exEdit.muscleGroup,
-        videoUrl: exEdit.videoUrl,
       }),
     });
     const updated = await res.json();
-    setAllExercises((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    // Merge rather than replace — the PATCH response doesn't carry linkCount.
+    setAllExercises((prev) => prev.map((e) => (e.id === id ? { ...e, ...updated } : e)));
     setEditingExId(null);
   };
 
@@ -608,6 +740,32 @@ export default function App() {
 
   const dayTypeColor = workout.dayType === "Rest" ? inkDim : amber;
   const exDoneCount = workout.log.filter((r) => r.done).length;
+
+  // Manage-exercise-library rows: a search flattens everything into a plain
+  // filtered list; with no query, group into collapsible Push/Pull/Legs
+  // sections instead — the library's long enough now (48 exercises) that
+  // showing it all flat was the actual complaint.
+  const filteredFoods = foodQuery.trim()
+    ? foods.filter((f) => f.name.toLowerCase().includes(foodQuery.trim().toLowerCase()))
+    : foods;
+
+  const exerciseSearchActive = exerciseQuery.trim().length > 0;
+  const manageExerciseRows: ({ type: "header"; key: string; label: string } | { type: "exercise"; ex: Exercise })[] = [];
+  if (exerciseSearchActive) {
+    const q = exerciseQuery.trim().toLowerCase();
+    allExercises
+      .filter((ex) => ex.name.toLowerCase().includes(q) || ex.muscleGroup.toLowerCase().includes(q))
+      .forEach((ex) => manageExerciseRows.push({ type: "exercise", ex }));
+  } else {
+    (["Push", "Pull", "Legs"] as const).forEach((dt) => {
+      const group = allExercises.filter((ex) => ex.dayType === dt);
+      if (group.length === 0) return;
+      manageExerciseRows.push({ type: "header", key: dt, label: `${dt} (${group.length})` });
+      if (expandedDayTypes.has(dt)) {
+        group.forEach((ex) => manageExerciseRows.push({ type: "exercise", ex }));
+      }
+    });
+  }
 
   return (
     <div style={{ minHeight: "100vh", padding: "24px 16px" }}>
@@ -724,7 +882,7 @@ export default function App() {
                           {row.name}
                         </span>
                         <MuscleBadge muscleGroup={row.muscleGroup ?? ""} />
-                        <VideoLink videoUrl={row.videoUrl} />
+                        <TutorialButton exerciseId={row.exerciseId} linkCount={row.linkCount} />
                         <button onClick={() => removeLogRow(row.id)} style={{ background: "none", border: "none", color: inkDim, padding: 2 }}>
                           ✕
                         </button>
@@ -761,19 +919,32 @@ export default function App() {
                 </div>
               )}
 
+              <MuscleDiagram
+                muscleGroups={[
+                  ...workout.log.map((r) => r.muscleGroup ?? ""),
+                  ...exerciseOptions.map((ex) => ex.muscleGroup),
+                ]}
+              />
+
               {exerciseOptions.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                   {exerciseOptions
                     .filter((ex) => !workout.log.some((r) => r.exerciseId === ex.id))
                     .map((ex) => (
-                      <button
-                        key={ex.id}
-                        onClick={() => addExerciseToLog(ex)}
-                        style={{ ...tinyBtn, borderStyle: "dashed", display: "flex", alignItems: "center", gap: 5 }}
-                      >
-                        + {ex.name}
-                        <MuscleBadge muscleGroup={ex.muscleGroup} />
-                      </button>
+                      <div key={ex.id} style={{ ...tinyBtn, borderStyle: "dashed", display: "flex", alignItems: "center", gap: 5, padding: 0 }}>
+                        <button
+                          onClick={() => addExerciseToLog(ex)}
+                          style={{ background: "none", border: "none", color: "inherit", font: "inherit", padding: "5px 8px", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}
+                        >
+                          + {ex.name}
+                          <MuscleBadge muscleGroup={ex.muscleGroup} />
+                        </button>
+                        {ex.linkCount > 0 && (
+                          <span style={{ paddingRight: 6 }}>
+                            <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} />
+                          </span>
+                        )}
+                      </div>
                     ))}
                 </div>
               )}
@@ -909,10 +1080,10 @@ export default function App() {
                             <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
                               {ex.name}
                               {ex.block !== "main" && <span style={{ color: inkDim }}> · {ex.block}</span>}
-                              {ex.videoUrl && (
+                              {ex.linkCount > 0 && (
                                 <>
                                   {" "}
-                                  <VideoLink videoUrl={ex.videoUrl} />
+                                  <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} />
                                 </>
                               )}
                             </td>
@@ -936,13 +1107,52 @@ export default function App() {
         )}
         <div style={{ marginBottom: 20 }}>
           {showManageExercises && (
-            <div style={{ border: `1px solid ${line}`, marginTop: 8 }}>
-              {allExercises.map((ex, idx) => (
+            <>
+              <input
+                value={exerciseQuery}
+                onChange={(e) => setExerciseQuery(e.target.value)}
+                placeholder="Search exercises or muscle group…"
+                style={{ ...smallInputStyle, width: "100%", marginTop: 8, marginBottom: 8, boxSizing: "border-box" }}
+              />
+              <div style={{ border: `1px solid ${line}` }}>
+                {manageExerciseRows.map((row, idx) => {
+                  if (row.type === "header") {
+                    const expanded = expandedDayTypes.has(row.key);
+                    return (
+                      <button
+                        key={row.key}
+                        onClick={() =>
+                          setExpandedDayTypes((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(row.key)) next.delete(row.key);
+                            else next.add(row.key);
+                            return next;
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          background: bg2,
+                          border: "none",
+                          borderBottom: `1px solid ${line}`,
+                          color: amber,
+                          fontWeight: 600,
+                          fontSize: 13,
+                          padding: "8px 10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {expanded ? "▾" : "▸"} {row.label}
+                      </button>
+                    );
+                  }
+                  const ex = row.ex;
+                  return (
                 <div
                   key={ex.id}
                   style={{
                     padding: "8px 10px",
-                    borderBottom: idx < allExercises.length - 1 ? `1px solid ${line}` : "none",
+                    borderBottom: idx < manageExerciseRows.length - 1 ? `1px solid ${line}` : "none",
                   }}
                 >
                   {editingExId === ex.id ? (
@@ -975,12 +1185,6 @@ export default function App() {
                         style={smallInputStyle}
                         placeholder="Muscle group, e.g. Chest · Upper"
                       />
-                      <input
-                        value={exEdit.videoUrl}
-                        onChange={(e) => setExEdit({ ...exEdit, videoUrl: e.target.value })}
-                        style={smallInputStyle}
-                        placeholder="Video URL (optional)"
-                      />
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => saveEditEx(ex.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                           Save
@@ -995,7 +1199,7 @@ export default function App() {
                       <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         {ex.name} <span style={{ color: inkDim }}>· {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}</span>
                         <MuscleBadge muscleGroup={ex.muscleGroup} />
-                        <VideoLink videoUrl={ex.videoUrl} />
+                        <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} manageMode />
                       </span>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => startEditEx(ex)} style={tinyBtn}>
@@ -1008,8 +1212,10 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
@@ -1035,13 +1241,22 @@ export default function App() {
 
         {/* ---- Add food ---- */}
         <div style={sectionLabel}>ADD FOOD</div>
+        <input
+          value={foodQuery}
+          onChange={(e) => setFoodQuery(e.target.value)}
+          placeholder="Search foods…"
+          style={{ ...inputStyle, width: "100%", marginBottom: 8, boxSizing: "border-box" }}
+        />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 10 }}>
-          {foods.map((f) => (
+          {filteredFoods.map((f) => (
             <button key={f.id} className="foodbtn" onClick={() => addFood(f)} style={foodBtnStyle}>
               <span style={{ fontSize: 13 }}>{f.name}</span>
               <span style={{ fontSize: 12, color: amber, fontWeight: 600 }}>{f.protein}g</span>
             </button>
           ))}
+          {filteredFoods.length === 0 && (
+            <div style={{ fontSize: 12, color: inkDim, gridColumn: "1 / -1" }}>No foods match &quot;{foodQuery}&quot;</div>
+          )}
         </div>
 
         {!showCustomFood ? (
@@ -1077,8 +1292,8 @@ export default function App() {
         </button>
         {showManageFoods && (
           <div style={{ border: `1px solid ${line}`, marginBottom: 20 }}>
-            {foods.map((f, idx) => (
-              <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < foods.length - 1 ? `1px solid ${line}` : "none" }}>
+            {filteredFoods.map((f, idx) => (
+              <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < filteredFoods.length - 1 ? `1px solid ${line}` : "none" }}>
                 {editingFoodId === f.id ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <input value={foodEdit.name} onChange={(e) => setFoodEdit({ ...foodEdit, name: e.target.value })} style={smallInputStyle} />

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { workoutSessions, exerciseLog, exercises } from "@/lib/schema";
 import { resolveDayType, resolveVariant } from "@/lib/rotation";
+import { getLinkCounts } from "@/lib/exerciseLinks";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date");
@@ -41,13 +42,15 @@ export async function GET(req: NextRequest) {
       restSeconds: exercises.restSeconds,
       block: exercises.block,
       muscleGroup: exercises.muscleGroup,
-      videoUrl: exercises.videoUrl,
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))
     .where(eq(exerciseLog.date, date));
 
-  return NextResponse.json({ ...session, variant, log });
+  const linkCounts = await getLinkCounts(log.map((r) => r.exerciseId));
+  const logWithLinks = log.map((r) => ({ ...r, linkCount: linkCounts[r.exerciseId] ?? 0 }));
+
+  return NextResponse.json({ ...session, variant, log: logWithLinks });
 }
 
 // Commits a session row: marks it done/rest/skipped, or overrides the

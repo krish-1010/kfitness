@@ -65,8 +65,19 @@ export const exercises = pgTable("exercises", {
   // for display, independent of the strength/hypertrophy variant.
   block: text("block").notNull().default("main"),
   muscleGroup: text("muscle_group").notNull().default(""),
-  videoUrl: text("video_url"),
   archived: boolean("archived").notNull().default(false),
+});
+
+// Tutorial/demo links for an exercise. Replaces the single nullable
+// videoUrl column — an exercise can now have several labeled links (e.g.
+// "Form check", "Common mistakes"), not just one. exerciseId isn't a DB
+// foreign key, same convention as exerciseLog, so archiving an exercise
+// never orphans a delete cascade.
+export const exerciseLinks = pgTable("exercise_links", {
+  id: serial("id").primaryKey(),
+  exerciseId: integer("exercise_id").notNull(),
+  label: text("label").notNull().default(""),
+  url: text("url").notNull(),
 });
 
 // One row per date once a day type is decided (suggested or overridden) or

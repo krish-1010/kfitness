@@ -14,7 +14,7 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, videoUrl } = body ?? {};
+  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup } = body ?? {};
 
   const patch: Partial<typeof exercises.$inferInsert> = {};
   if (typeof name === "string") patch.name = name;
@@ -25,7 +25,6 @@ export async function PATCH(
   if (variant && ["strength", "hypertrophy", "standard"].includes(variant)) patch.variant = variant;
   if (block && ["main", "core", "conditioning"].includes(block)) patch.block = block;
   if (typeof muscleGroup === "string") patch.muscleGroup = muscleGroup;
-  if (typeof videoUrl === "string") patch.videoUrl = videoUrl || null;
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "no valid fields to update" }, { status: 400 });

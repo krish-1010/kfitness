@@ -13,19 +13,20 @@
     "db:seed-supplements": "tsx scripts/seed-supplements.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.36.4",
     "next": "^16.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "drizzle-orm": "^0.36.4",
-    "@neondatabase/serverless": "^0.10.4"
+    "react-muscle-highlighter": "^1.2.0"
   },
   "devDependencies": {
-    "dotenv": "^16.4.7",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
-    "drizzle-kit": "^0.28.1"
+    "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
