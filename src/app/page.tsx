@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type MouseEvent } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Body from "react-muscle-highlighter";
 import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 import { muscleGroupsToBodyData } from "@/lib/muscleSlug";
@@ -19,6 +19,15 @@ function toLocalDateStr(d: Date): string {
 const TODAY = () => toLocalDateStr(new Date());
 
 const WATER_PRESETS = [500, 650, 850] as const;
+
+const PROGRAM_SECTIONS: [string, string, string][] = [
+  ["Push", "strength", "Push · Strength"],
+  ["Pull", "strength", "Pull · Strength"],
+  ["Legs", "strength", "Legs · Strength"],
+  ["Push", "hypertrophy", "Push · Hypertrophy"],
+  ["Pull", "hypertrophy", "Pull · Hypertrophy"],
+  ["Legs", "hypertrophy", "Legs · Hypertrophy"],
+];
 
 type LogItem = { id: number; name: string; protein: number; kcal: number };
 type DayLog = { items: LogItem[]; supplements: Record<string, boolean> };
@@ -99,54 +108,58 @@ function ProgressBar({ value, goal, color }: { value: number; goal: number; colo
 
 const cardStyle = { background: bg2, border: `1px solid ${line}`, padding: 14 } as const;
 
-function MuscleBadge({ muscleGroup }: { muscleGroup: string }) {
+function MuscleBadge({ muscleGroup, onClick, linkCount }: { muscleGroup: string; onClick?: () => void; linkCount?: number }) {
   if (!muscleGroup) return null;
   const color = muscleColor(muscleGroup);
+  const style = {
+    fontSize: 10,
+    color,
+    border: `1px solid ${color}55`,
+    padding: "1px 5px",
+    whiteSpace: "nowrap" as const,
+    background: "none",
+    cursor: onClick ? "pointer" : "default",
+  };
+  const label = linkCount ? `${muscleGroup} · ▶${linkCount}` : muscleGroup;
+  if (!onClick) return <span style={style}>{label}</span>;
   return (
-    <span style={{ fontSize: 10, color, border: `1px solid ${color}55`, padding: "1px 5px", whiteSpace: "nowrap" }}>
-      {muscleGroup}
-    </span>
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      style={style}
+    >
+      {label}
+    </button>
   );
 }
 
-// Shows a "▶" affordance that lazily fetches an exercise's tutorial links on
-// first click and opens a small popover. In view contexts (log rows,
-// quick-add) it's hidden entirely when there are zero links, to avoid a sea
-// of dead buttons — in manage mode it always shows, since that's how you add
-// the first one.
-function TutorialButton({
-  exerciseId,
-  linkCount,
-  manageMode,
-}: {
-  exerciseId: number;
-  linkCount: number;
-  manageMode?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
+type DetailTarget = { id: number; name: string; muscleGroup: string; manage: boolean };
+
+// Clicking an exercise's muscle badge anywhere opens this: a clear, single
+// exercise's target muscle at a readable size (not the tiny whole-day
+// aggregate diagram) plus its tutorial links, combined in one place instead
+// of two ("what does this hit" and "how do I do it" are the same question).
+function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClose: () => void }) {
   const [links, setLinks] = useState<ExerciseLink[] | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
 
-  if (linkCount === 0 && !manageMode) return null;
-
-  const toggle = async (e: MouseEvent) => {
-    e.stopPropagation();
-    if (!open && links === null) {
-      const res = await fetch(`/api/exercises/${exerciseId}/links`);
-      setLinks(await res.json());
-    }
-    setOpen((v) => !v);
-  };
+  useEffect(() => {
+    fetch(`/api/exercises/${target.id}/links`)
+      .then((r) => r.json())
+      .then(setLinks);
+  }, [target.id]);
 
   const removeLink = async (linkId: number) => {
     setLinks((prev) => (prev ?? []).filter((l) => l.id !== linkId));
-    await fetch(`/api/exercises/${exerciseId}/links/${linkId}`, { method: "DELETE" });
+    await fetch(`/api/exercises/${target.id}/links/${linkId}`, { method: "DELETE" });
   };
 
   const addLink = async () => {
     if (!newUrl.trim()) return;
-    const res = await fetch(`/api/exercises/${exerciseId}/links`, {
+    const res = await fetch(`/api/exercises/${target.id}/links`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label: newLabel.trim(), url: newUrl.trim() }),
@@ -157,71 +170,71 @@ function TutorialButton({
     setNewUrl("");
   };
 
+  // Full intensity on the single target region — this is "where does THIS
+  // exercise hit", not a multi-exercise heat map, so there's only one level.
+  const data = muscleGroupsToBodyData([target.muscleGroup]).map((d) => ({ ...d, intensity: 3 }));
+
   return (
-    <span style={{ position: "relative" }}>
-      <button
-        onClick={toggle}
-        style={{ fontSize: 10, color: amber, background: "none", border: "none", padding: 0, whiteSpace: "nowrap", cursor: "pointer" }}
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: bg2, border: `1px solid ${line}`, maxWidth: 380, width: "100%", maxHeight: "85vh", overflowY: "auto", padding: 16 }}
       >
-        ▶{linkCount > 0 ? ` ${linkCount}` : ""}
-      </button>
-      {open && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "absolute",
-            top: "100%",
-            right: 0,
-            zIndex: 5,
-            background: bg2,
-            border: `1px solid ${line}`,
-            padding: 8,
-            minWidth: 180,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4,
-          }}
-        >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{target.name}</div>
+          <button onClick={onClose} style={{ background: "none", border: `1px solid ${line}`, color: inkDim, padding: "2px 8px" }}>
+            ✕
+          </button>
+        </div>
+        <MuscleBadge muscleGroup={target.muscleGroup} />
+
+        {data.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "center", gap: 12, margin: "14px 0" }}>
+            <Body data={data} side="front" gender="male" scale={0.55} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
+            <Body data={data} side="back" gender="male" scale={0.55} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
+          </div>
+        )}
+
+        <div style={{ fontSize: 11, color: inkDim, marginBottom: 6, letterSpacing: 0.3 }}>TUTORIAL LINKS</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: target.manage ? 10 : 0 }}>
           {links === null ? (
-            <span style={{ fontSize: 11, color: inkDim }}>Loading…</span>
+            <span style={{ fontSize: 12, color: inkDim }}>Loading…</span>
           ) : links.length === 0 ? (
-            <span style={{ fontSize: 11, color: inkDim }}>No tutorial links yet</span>
+            <span style={{ fontSize: 12, color: inkDim }}>No tutorial links yet</span>
           ) : (
             links.map((l) => (
               <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: amber }}>
+                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: amber }}>
                   {l.label || l.url}
                 </a>
-                {manageMode && (
-                  <button onClick={() => removeLink(l.id)} style={{ background: "none", border: "none", color: inkDim, fontSize: 11, padding: 2 }}>
+                {target.manage && (
+                  <button onClick={() => removeLink(l.id)} style={{ background: "none", border: "none", color: inkDim, fontSize: 12, padding: 2 }}>
                     ✕
                   </button>
                 )}
               </div>
             ))
           )}
-          {manageMode && (
-            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4, borderTop: `1px solid ${line}`, paddingTop: 4 }}>
-              <input
-                placeholder="Label (e.g. Form check)"
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                style={{ fontSize: 11, padding: "4px 6px", background: bg, border: `1px solid ${line}`, color: ink }}
-              />
-              <input
-                placeholder="URL"
-                value={newUrl}
-                onChange={(e) => setNewUrl(e.target.value)}
-                style={{ fontSize: 11, padding: "4px 6px", background: bg, border: `1px solid ${line}`, color: ink }}
-              />
-              <button onClick={addLink} style={{ fontSize: 11, padding: "4px 6px", background: "none", border: `1px solid ${amber}`, color: amber }}>
-                + Add link
-              </button>
-            </div>
-          )}
         </div>
-      )}
-    </span>
+        {target.manage && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
+            <input
+              placeholder="Label (e.g. Form check)"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              style={smallInputStyle}
+            />
+            <input placeholder="URL" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} style={smallInputStyle} />
+            <button onClick={addLink} style={{ ...secondaryBtn }}>
+              + Add link
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -343,6 +356,7 @@ export default function App() {
   const [showCustomFood, setShowCustomFood] = useState(false);
   const [showManageFoods, setShowManageFoods] = useState(false);
   const [foodQuery, setFoodQuery] = useState("");
+  const [foodPage, setFoodPage] = useState(0);
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
   const [foodEdit, setFoodEdit] = useState({ name: "", protein: "", kcal: "" });
   const [showManageSupplements, setShowManageSupplements] = useState(false);
@@ -357,10 +371,12 @@ export default function App() {
   const [showCustomExercise, setShowCustomExercise] = useState(false);
   const [showManageExercises, setShowManageExercises] = useState(false);
   const [showFullProgram, setShowFullProgram] = useState(false);
+  const [programPage, setProgramPage] = useState(0);
   const [editingExId, setEditingExId] = useState<number | null>(null);
   const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12", muscleGroup: "" });
   const [exerciseQuery, setExerciseQuery] = useState("");
   const [expandedDayTypes, setExpandedDayTypes] = useState<Set<string>>(new Set());
+  const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
 
   const [weightInput, setWeightInput] = useState("");
   const [waterEntries, setWaterEntries] = useState<WaterEntry[]>([]);
@@ -748,6 +764,10 @@ export default function App() {
   const filteredFoods = foodQuery.trim()
     ? foods.filter((f) => f.name.toLowerCase().includes(foodQuery.trim().toLowerCase()))
     : foods;
+  const FOOD_PAGE_SIZE = 10;
+  const foodPageCount = Math.max(1, Math.ceil(filteredFoods.length / FOOD_PAGE_SIZE));
+  const clampedFoodPage = Math.min(foodPage, foodPageCount - 1);
+  const pagedFoods = filteredFoods.slice(clampedFoodPage * FOOD_PAGE_SIZE, (clampedFoodPage + 1) * FOOD_PAGE_SIZE);
 
   const exerciseSearchActive = exerciseQuery.trim().length > 0;
   const manageExerciseRows: ({ type: "header"; key: string; label: string } | { type: "exercise"; ex: Exercise })[] = [];
@@ -881,8 +901,13 @@ export default function App() {
                         >
                           {row.name}
                         </span>
-                        <MuscleBadge muscleGroup={row.muscleGroup ?? ""} />
-                        <TutorialButton exerciseId={row.exerciseId} linkCount={row.linkCount} />
+                        <MuscleBadge
+                          muscleGroup={row.muscleGroup ?? ""}
+                          linkCount={row.linkCount}
+                          onClick={() =>
+                            setDetailTarget({ id: row.exerciseId, name: row.name ?? "", muscleGroup: row.muscleGroup ?? "", manage: false })
+                          }
+                        />
                         <button onClick={() => removeLogRow(row.id)} style={{ background: "none", border: "none", color: inkDim, padding: 2 }}>
                           ✕
                         </button>
@@ -934,16 +959,17 @@ export default function App() {
                       <div key={ex.id} style={{ ...tinyBtn, borderStyle: "dashed", display: "flex", alignItems: "center", gap: 5, padding: 0 }}>
                         <button
                           onClick={() => addExerciseToLog(ex)}
-                          style={{ background: "none", border: "none", color: "inherit", font: "inherit", padding: "5px 8px", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}
+                          style={{ background: "none", border: "none", color: "inherit", font: "inherit", padding: "5px 8px", cursor: "pointer" }}
                         >
                           + {ex.name}
-                          <MuscleBadge muscleGroup={ex.muscleGroup} />
                         </button>
-                        {ex.linkCount > 0 && (
-                          <span style={{ paddingRight: 6 }}>
-                            <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} />
-                          </span>
-                        )}
+                        <span style={{ paddingRight: 6 }}>
+                          <MuscleBadge
+                            muscleGroup={ex.muscleGroup}
+                            linkCount={ex.linkCount}
+                            onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: false })}
+                          />
+                        </span>
                       </div>
                     ))}
                 </div>
@@ -998,6 +1024,7 @@ export default function App() {
           <button
             onClick={() => {
               setShowFullProgram(true);
+              setProgramPage(0);
               loadAllExercises();
             }}
             style={{ ...tinyBtn, flex: 1 }}
@@ -1006,68 +1033,63 @@ export default function App() {
           </button>
         </div>
 
-        {showFullProgram && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "#000000cc",
-              zIndex: 10,
-              padding: "20px 12px",
-              overflowY: "auto",
-            }}
-          >
-            <div style={{ maxWidth: 640, margin: "0 auto" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div style={{ fontSize: 18, fontWeight: 600 }}>Full PPL Program</div>
-                <button onClick={() => setShowFullProgram(false)} style={navBtn}>
-                  ✕
-                </button>
-              </div>
-              {(
-                [
-                  ["Push", "strength", "Push · Strength"],
-                  ["Pull", "strength", "Pull · Strength"],
-                  ["Legs", "strength", "Legs · Strength"],
-                  ["Push", "hypertrophy", "Push · Hypertrophy"],
-                  ["Pull", "hypertrophy", "Pull · Hypertrophy"],
-                  ["Legs", "hypertrophy", "Legs · Hypertrophy"],
-                ] as [string, string, string][]
-              ).map(([dt, v, label]) => {
-                const sessionExercises = allExercises
-                  .filter((ex) => !ex.archived && ex.dayType === dt && (ex.variant === v || ex.variant === "standard"))
-                  .sort((a, b) => {
-                    const order: Record<string, number> = { main: 0, core: 1, conditioning: 2 };
-                    return (order[a.block] ?? 0) - (order[b.block] ?? 0);
-                  });
-                return (
-                  <div key={label} style={{ marginBottom: 20 }}>
-                    <div
-                      style={{
-                        background: amber + "22",
-                        color: amber,
-                        fontWeight: 600,
-                        padding: 8,
-                        fontSize: 13,
-                        border: `1px solid ${line}`,
-                      }}
+        {showFullProgram &&
+          (() => {
+            const [dt, v, label] = PROGRAM_SECTIONS[programPage]!;
+            const sessionExercises = allExercises
+              .filter((ex) => !ex.archived && ex.dayType === dt && (ex.variant === v || ex.variant === "standard"))
+              .sort((a, b) => {
+                const order: Record<string, number> = { main: 0, core: 1, conditioning: 2 };
+                return (order[a.block] ?? 0) - (order[b.block] ?? 0);
+              });
+            return (
+              <div style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 10, overflowY: "auto" }}>
+                <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 12px 20px" }}>
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      background: bg,
+                      zIndex: 1,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "14px 0 10px",
+                    }}
+                  >
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>Full PPL Program</div>
+                    <button onClick={() => setShowFullProgram(false)} style={navBtn}>
+                      ✕
+                    </button>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <button onClick={() => setProgramPage((p) => Math.max(0, p - 1))} disabled={programPage === 0} style={navBtn}>
+                      ‹
+                    </button>
+                    <div style={{ fontSize: 12, color: inkDim }}>
+                      {programPage + 1} / {PROGRAM_SECTIONS.length}
+                    </div>
+                    <button
+                      onClick={() => setProgramPage((p) => Math.min(PROGRAM_SECTIONS.length - 1, p + 1))}
+                      disabled={programPage === PROGRAM_SECTIONS.length - 1}
+                      style={navBtn}
                     >
+                      ›
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ background: amber + "22", color: amber, fontWeight: 600, padding: 6, fontSize: 12, border: `1px solid ${line}` }}>
                       {label}
                     </div>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                       <thead>
                         <tr>
                           {["Exercise", "Muscle", "Sets", "Reps", "Rest"].map((h) => (
                             <th
                               key={h}
-                              style={{
-                                border: `1px solid ${line}`,
-                                padding: "6px 8px",
-                                textAlign: "left",
-                                background: bg2,
-                                color: inkDim,
-                                fontSize: 11,
-                              }}
+                              style={{ border: `1px solid ${line}`, padding: "4px 6px", textAlign: "left", background: bg2, color: inkDim, fontSize: 10 }}
                             >
                               {h}
                             </th>
@@ -1077,34 +1099,29 @@ export default function App() {
                       <tbody>
                         {sessionExercises.map((ex) => (
                           <tr key={ex.id}>
-                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
+                            <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>
                               {ex.name}
                               {ex.block !== "main" && <span style={{ color: inkDim }}> · {ex.block}</span>}
-                              {ex.linkCount > 0 && (
-                                <>
-                                  {" "}
-                                  <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} />
-                                </>
-                              )}
                             </td>
-                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
-                              <MuscleBadge muscleGroup={ex.muscleGroup} />
+                            <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>
+                              <MuscleBadge
+                                muscleGroup={ex.muscleGroup}
+                                linkCount={ex.linkCount}
+                                onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: false })}
+                              />
                             </td>
-                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>{ex.defaultSets}</td>
-                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>{ex.defaultReps}</td>
-                            <td style={{ border: `1px solid ${line}`, padding: "6px 8px" }}>
-                              {ex.restSeconds ? `${ex.restSeconds} sec` : "—"}
-                            </td>
+                            <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.defaultSets}</td>
+                            <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.defaultReps}</td>
+                            <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.restSeconds ? `${ex.restSeconds}s` : "—"}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                </div>
+              </div>
+            );
+          })()}
         <div style={{ marginBottom: 20 }}>
           {showManageExercises && (
             <>
@@ -1198,8 +1215,11 @@ export default function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         {ex.name} <span style={{ color: inkDim }}>· {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}</span>
-                        <MuscleBadge muscleGroup={ex.muscleGroup} />
-                        <TutorialButton exerciseId={ex.id} linkCount={ex.linkCount} manageMode />
+                        <MuscleBadge
+                          muscleGroup={ex.muscleGroup}
+                          linkCount={ex.linkCount}
+                          onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: true })}
+                        />
                       </span>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => startEditEx(ex)} style={tinyBtn}>
@@ -1243,12 +1263,15 @@ export default function App() {
         <div style={sectionLabel}>ADD FOOD</div>
         <input
           value={foodQuery}
-          onChange={(e) => setFoodQuery(e.target.value)}
+          onChange={(e) => {
+            setFoodQuery(e.target.value);
+            setFoodPage(0);
+          }}
           placeholder="Search foods…"
           style={{ ...inputStyle, width: "100%", marginBottom: 8, boxSizing: "border-box" }}
         />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 10 }}>
-          {filteredFoods.map((f) => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 8 }}>
+          {pagedFoods.map((f) => (
             <button key={f.id} className="foodbtn" onClick={() => addFood(f)} style={foodBtnStyle}>
               <span style={{ fontSize: 13 }}>{f.name}</span>
               <span style={{ fontSize: 12, color: amber, fontWeight: 600 }}>{f.protein}g</span>
@@ -1258,6 +1281,19 @@ export default function App() {
             <div style={{ fontSize: 12, color: inkDim, gridColumn: "1 / -1" }}>No foods match &quot;{foodQuery}&quot;</div>
           )}
         </div>
+        {foodPageCount > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <button onClick={() => setFoodPage((p) => Math.max(0, p - 1))} disabled={clampedFoodPage === 0} style={navBtn}>
+              ‹
+            </button>
+            <div style={{ fontSize: 11, color: inkDim }}>
+              Page {clampedFoodPage + 1} / {foodPageCount}
+            </div>
+            <button onClick={() => setFoodPage((p) => Math.min(foodPageCount - 1, p + 1))} disabled={clampedFoodPage === foodPageCount - 1} style={navBtn}>
+              ›
+            </button>
+          </div>
+        )}
 
         {!showCustomFood ? (
           <button
@@ -1291,9 +1327,9 @@ export default function App() {
           {showManageFoods ? "Hide" : "Manage"} food list
         </button>
         {showManageFoods && (
-          <div style={{ border: `1px solid ${line}`, marginBottom: 20 }}>
-            {filteredFoods.map((f, idx) => (
-              <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < filteredFoods.length - 1 ? `1px solid ${line}` : "none" }}>
+          <div style={{ border: `1px solid ${line}`, marginBottom: 8 }}>
+            {pagedFoods.map((f, idx) => (
+              <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < pagedFoods.length - 1 ? `1px solid ${line}` : "none" }}>
                 {editingFoodId === f.id ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <input value={foodEdit.name} onChange={(e) => setFoodEdit({ ...foodEdit, name: e.target.value })} style={smallInputStyle} />
@@ -1555,6 +1591,7 @@ export default function App() {
           {weights.length > 0 ? `${weights[weights.length - 1]!.weight}kg` : "Cutting"} · {KCAL_GOAL} kcal · {PROTEIN_GOAL}g protein · PPL ×2
         </div>
       </div>
+      {detailTarget && <ExerciseDetailModal target={detailTarget} onClose={() => setDetailTarget(null)} />}
     </div>
   );
 }
