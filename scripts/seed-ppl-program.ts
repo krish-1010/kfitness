@@ -27,7 +27,8 @@ type Seed = {
 
 const PROGRAM: Seed[] = [
   // Push — Strength
-  { name: "Barbell Bench Press", dayType: "Push", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength", muscleGroup: "Chest · Mid" },
+  { name: "Push-ups (warm-up)", dayType: "Push", defaultSets: 2, defaultReps: "5-6", restSeconds: 60, variant: "strength", muscleGroup: "Chest · Mid" },
+  { name: "Barbell Bench Press", dayType: "Push", defaultSets: 4, defaultReps: "6-8", restSeconds: 180, variant: "strength", muscleGroup: "Chest · Mid" },
   { name: "Machine Shoulder Press", dayType: "Push", defaultSets: 3, defaultReps: "8-10", restSeconds: 75, variant: "strength", muscleGroup: "Shoulders · Front" },
   { name: "Pec Deck Fly", dayType: "Push", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength", muscleGroup: "Chest · Mid" },
   { name: "DB Lateral Raises", dayType: "Push", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "strength", muscleGroup: "Shoulders · Side" },
@@ -42,9 +43,12 @@ const PROGRAM: Seed[] = [
   { name: "Tricep Pushdowns (Hyper)", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Triceps · Lateral" },
   { name: "Both-Arm DB Extension", dayType: "Push", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Triceps · Long Head" },
   { name: "Cable Crossover (Low-to-High)", dayType: "Push", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Chest · Lower/Inner" },
+  { name: "Push-ups (AMRAP)", dayType: "Push", defaultSets: 1, defaultReps: "AMRAP", restSeconds: 0, variant: "hypertrophy", muscleGroup: "Chest · Mid" },
 
-  // Pull — Strength
-  { name: "Lat Pulldown", dayType: "Pull", defaultSets: 4, defaultReps: "6-8", restSeconds: 90, variant: "strength", muscleGroup: "Back · Lats" },
+  // Pull — Strength. Assisted pull-ups over lat pulldown for movement
+  // specificity — log the assistance level (kg) in the weight field, the
+  // milestone is that number going DOWN to 0, not up.
+  { name: "Assisted Pull-ups", dayType: "Pull", defaultSets: 4, defaultReps: "6-8", restSeconds: 150, variant: "strength", muscleGroup: "Back · Lats" },
   { name: "Seated Cable Row", dayType: "Pull", defaultSets: 4, defaultReps: "8-10", restSeconds: 75, variant: "strength", muscleGroup: "Back · Mid/Thickness" },
   { name: "DB Single-Arm Row", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 60, variant: "strength", muscleGroup: "Back · Mid/Thickness" },
   { name: "DB Bicep Curls", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "strength", muscleGroup: "Biceps" },
@@ -57,26 +61,21 @@ const PROGRAM: Seed[] = [
   { name: "Plank", dayType: "Pull", defaultSets: 3, defaultReps: "30 sec", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Anterior" },
   { name: "Leg Raises", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Anterior" },
   { name: "Pelvic Bridges", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Core · Posterior/Glutes" },
-  { name: "Prone Back Extension", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Lower Back · Erectors" },
+  { name: "45-Degree Back Extension", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 25, variant: "strength", block: "core", muscleGroup: "Lower Back · Erectors" },
 
   // Pull — Hypertrophy
   { name: "Seated Cable Row (Hyper)", dayType: "Pull", defaultSets: 4, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Back · Mid/Thickness" },
-  { name: "Lat Pulldown (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Back · Lats" },
+  { name: "Assisted Pull-ups (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 60, variant: "hypertrophy", muscleGroup: "Back · Lats" },
   { name: "DB Single-Arm Row (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Back · Mid/Thickness" },
   { name: "DB Bicep Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Biceps" },
   { name: "DB Hammer Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Biceps · Brachialis" },
   { name: "Machine Wrist Curls (Hyper)", dayType: "Pull", defaultSets: 3, defaultReps: "15-20", restSeconds: 30, variant: "hypertrophy", muscleGroup: "Forearms" },
   { name: "DB Shrugs", dayType: "Pull", defaultSets: 3, defaultReps: "12-15", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Traps" },
-  { name: "Incline DB Curl", dayType: "Pull", defaultSets: 3, defaultReps: "10-12", restSeconds: 45, variant: "hypertrophy", muscleGroup: "Biceps · Long Head" },
 
   // Pull — Hypertrophy, conditioning block (replaces steady-state cardio
-  // that day only, once a week)
-  { name: "Jumping Jacks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
-  { name: "High Knees", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
-  { name: "Buttkicks", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
-  { name: "Step-ups", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
-  { name: "Mountain Climbers", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
-  { name: "Inch Worm", dayType: "Pull", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
+  // that day only, once a week). A single incline walk instead of the
+  // original 6-move circuit, since PT sessions are already endurance-heavy.
+  { name: "Incline Treadmill Walk", dayType: "Pull", defaultSets: 1, defaultReps: "15 min", restSeconds: 0, variant: "hypertrophy", block: "conditioning", muscleGroup: "Full Body · Conditioning" },
 
   // Legs — Strength
   { name: "Smith Machine Squat", dayType: "Legs", defaultSets: 4, defaultReps: "6-8", restSeconds: 120, variant: "strength", muscleGroup: "Quads" },

@@ -1320,7 +1320,7 @@ export default function App() {
         </div>
 
         <div style={{ textAlign: "center", fontSize: 11, color: inkDim, marginTop: 24, paddingBottom: 8 }}>
-          90kg → cut · 2700-2800 kcal · 120g protein · PPL ×2
+          {weights.length > 0 ? `${weights[weights.length - 1]!.weight}kg` : "Cutting"} · {KCAL_GOAL} kcal · {PROTEIN_GOAL}g protein · PPL ×2
         </div>
       </div>
     </div>
