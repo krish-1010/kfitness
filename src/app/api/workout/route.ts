@@ -10,7 +10,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "date query param required" }, { status: 400 });
   }
 
-  const session = await resolveDayType(date);
+  // A previewDayType lets the UI show what another day type would look like
+  // (exercise list, strength/hypertrophy variant) WITHOUT writing anything —
+  // browsing "what would Legs look like today" must never silently commit
+  // today as a Legs day. Only an explicit action (logging an exercise,
+  // marking the day done/rest) writes a row, via POST below.
+  const previewDayType = req.nextUrl.searchParams.get("previewDayType") as
+    | "Push"
+    | "Pull"
+    | "Legs"
+    | "Rest"
+    | null;
+
+  const session = previewDayType
+    ? { dayType: previewDayType, status: "planned", suggested: true }
+    : await resolveDayType(date);
   const variant = session.dayType === "Rest" ? null : await resolveVariant(session.dayType, date);
 
   const log = await db

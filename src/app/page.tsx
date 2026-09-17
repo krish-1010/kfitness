@@ -255,8 +255,11 @@ export default function App() {
     setSupplements(await res.json());
   }, []);
 
-  const loadWorkout = useCallback(async (d: string) => {
-    const res = await fetch(`/api/workout?date=${d}`);
+  const loadWorkout = useCallback(async (d: string, previewDayType?: DayType) => {
+    const url = previewDayType
+      ? `/api/workout?date=${d}&previewDayType=${previewDayType}`
+      : `/api/workout?date=${d}`;
+    const res = await fetch(url);
     const data: WorkoutState = await res.json();
     setWorkout(data);
     if (data.dayType !== "Rest" && data.variant) {
@@ -447,6 +450,20 @@ export default function App() {
   };
 
   const addExerciseToLog = async (ex: Exercise) => {
+    // The day type shown might still be an unsaved preview (browsing "what
+    // would Legs look like today" via the dropdown never writes anything —
+    // see the previewDayType handling in loadWorkout / /api/workout). The
+    // moment you actually log an exercise against it, that's a real
+    // decision, so commit it as this date's official (possibly overridden)
+    // day type before writing the log row.
+    if (workout.suggested) {
+      await fetch("/api/workout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, dayType: workout.dayType, status: "planned", isManualOverride: true }),
+      });
+      setWorkout((prev) => ({ ...prev, suggested: false }));
+    }
     // reps is intentionally omitted here — defaultReps like "6-8" is a
     // suggested range, not an actual outcome. It shows as a placeholder in
     // the UI; the logged value starts empty until a real number is entered.
@@ -657,7 +674,7 @@ export default function App() {
             </div>
             <select
               value={workout.dayType}
-              onChange={(e) => commitSession(e.target.value as DayType, "planned", true)}
+              onChange={(e) => loadWorkout(date, e.target.value as DayType)}
               style={{ ...smallInputStyle, width: "auto" }}
             >
               <option value="Push">Push</option>
