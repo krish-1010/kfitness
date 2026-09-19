@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 import { useDate } from "../_lib/DateContext";
+import { useGoals } from "../_lib/GoalsContext";
 import { CenteredLoading, ProgressBar } from "../_components/shared";
 
 type LogItem = { id: number; name: string; protein: number; kcal: number };
@@ -12,6 +12,7 @@ const FOOD_PAGE_SIZE = 10;
 
 export default function FoodPage() {
   const { date } = useDate();
+  const { proteinGoal, kcalGoal } = useGoals();
   const [items, setItems] = useState<LogItem[]>([]);
   const [foods, setFoods] = useState<Food[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,17 +132,17 @@ export default function FoodPage() {
           <div className="text-[11px] text-muted-foreground mb-1.5">PROTEIN</div>
           <div className="text-2xl font-bold mb-2">
             {totalProtein.toFixed(0)}
-            <span className="text-sm text-muted-foreground font-normal"> / {PROTEIN_GOAL}g</span>
+            <span className="text-sm text-muted-foreground font-normal"> / {proteinGoal}g</span>
           </div>
-          <ProgressBar value={totalProtein} goal={PROTEIN_GOAL} variant={totalProtein >= PROTEIN_GOAL ? "good" : "default"} />
+          <ProgressBar value={totalProtein} goal={proteinGoal} variant={totalProtein >= proteinGoal ? "good" : "default"} />
         </div>
         <div className="card">
           <div className="text-[11px] text-muted-foreground mb-1.5">CALORIES (est.)</div>
           <div className="text-2xl font-bold mb-2">
             {totalKcal.toFixed(0)}
-            <span className="text-sm text-muted-foreground font-normal"> / {KCAL_GOAL}</span>
+            <span className="text-sm text-muted-foreground font-normal"> / {kcalGoal}</span>
           </div>
-          <ProgressBar value={totalKcal} goal={KCAL_GOAL} variant={totalKcal > KCAL_GOAL ? "over" : "good"} />
+          <ProgressBar value={totalKcal} goal={kcalGoal} variant={totalKcal > kcalGoal ? "over" : "good"} />
         </div>
       </div>
 
