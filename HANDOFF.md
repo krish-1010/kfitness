@@ -34,7 +34,19 @@ New state added to `page.tsx`: `plansList`, `newPlanName`, `newPlanDayLabels`, `
 
 Verified via `next build` + `next start` against the live Neon DB: created a real test plan ("Upper/Lower Test"), activated it and confirmed the day dropdown at the top of the app switched to its day labels, reactivated PPL, archived the test plan, renamed "Push" to "Push Test" and back, added a throwaway day and deleted it, hit the blocked-delete 409 by trying to delete "Push" (which has active exercises) and confirmed the inline error message appeared and nothing was deleted, reordered Push/Pull swapping positions and reverted it — then did a final `GET /api/plans` + `GET /api/workout` against the live DB (both locally and against `fitkr.vercel.app` itself post-deploy) to confirm the plan ended up in exactly its original state (PPL active, Push/Pull/Legs in original order, no leftover test plan).
 
-**What's next:** everything else under "Phase 3 sub-items not yet started" below (canonical muscle taxonomy, alternative exercises, exercise priority, custom-exercise form parity) or Phase 4/5 — ask the user, don't assume.
+## ✅ RESOLVED — Canonical muscle taxonomy for the exercise editor (2026-09-19, same day, next commit)
+
+User said "what's next according to plan? do it" — went with the plan file's own Phase 3 ordering (muscle taxonomy is listed right after the plan/day schema work, before exercise alternatives/priority/custom-form-parity). Committed as `29b3997`, pushed, deployed (`dpl_KdZcQau2XmTKPh92syKr1HqCtjAg`, `READY`, aliased to `fitkr.vercel.app`), clean `get_runtime_errors` window since deploy.
+
+**Key decision: this was built as additive, not a migration.** Before writing any code, ran a one-off read-only `SELECT muscle_group, COUNT(*) FROM exercises GROUP BY muscle_group` against the live DB (script written to `scripts/_tmp-*.mjs` and deleted after, per convention) and got exactly 24 distinct non-empty values plus 64 rows with an empty string. New file `src/lib/muscleTaxonomy.ts` exports `MUSCLE_TAXONOMY` (an array of `{ group, options }` for `<optgroup>`s) and `ALL_MUSCLE_GROUPS` (flattened) — built to include **every one of those 24 values verbatim**, so switching the exercise edit form's muscle-group field from a free-text `<input>` to a `<select>` requires zero data changes; every existing exercise's current value is still a real selectable option. On top of that, it adds the specific gaps the user asked for ("look for proper muscle names, build the list even more"): `Back · Rhomboids`, `Biceps · Short Head`, `Triceps · Medial Head`, `Forearms · Flexors`/`Extensors`, a `Core · Rectus Upper`/`Rectus Lower`/`Obliques`/`Transverse` split (previously only `Core · Anterior`/`Posterior/Glutes` existed), a dedicated `Glutes` group (previously glutes were folded into the ambiguous `Core · Posterior/Glutes`), `Hip Flexors`, and a `Calves · Gastrocnemius`/`Soleus` split.
+
+`src/lib/muscleSlug.ts` (maps muscleGroup strings onto `react-muscle-highlighter`'s fixed `Slug` set for the body diagram) got two new prefix mappings so the richer taxonomy isn't just cosmetic: `"oblique"` → the library's actual `"obliques"` slug (checked before the broader `"core"` catch-all in the match order, since the code picks the first matching prefix), and `"glute"` → `"gluteal"`. `Hip Flexors` has no matching slug in the library at all, so — same pattern already used for `"Full Body · Conditioning"` — it's left unmapped and simply omitted from the diagram rather than forced onto a wrong region.
+
+Only the exercise **edit** form's muscle-group field changed (in the manage-exercise-library panel). The quick "+ Custom exercise" add form in the main workout card still doesn't collect a muscle group at all — that's the separate, still-unstarted "Custom-exercise creation form field parity" item below, not touched here.
+
+Verified via `next build` + `next start` against the live Neon DB: opened the edit form for "Barbell Bench Press" (an exercise with existing value `Chest · Mid`), confirmed it was correctly pre-selected among all 37 options across the 9 optgroups, changed it to `Core · Obliques` and saved (PATCH 200, the exercise-list badge updated to match), then reverted it back to `Chest · Mid` and confirmed via a direct `GET /api/exercises` read that it ended up exactly where it started.
+
+**What's next:** the remaining Phase 3 sub-items (exercise alternatives / `alternativeGroupId`, `exercises.priority` for fatigue-ordering, custom-exercise form parity) or Phase 4 (dashboard/calendar) or Phase 5 (theming) — ask the user, don't assume.
 
 ---
 
@@ -384,10 +396,10 @@ All of the above (everything except this HANDOFF.md itself) was committed as `7e
 ### Phase 3 sub-items not yet started at all
 
 - ~~**Manage Plans UI**~~ — **done, see "RESOLVED — Manage Plans UI" near the top of this document.**
-- **Canonical muscle taxonomy** — replacing the current free-text `muscleGroup` strings with a real researched list of proper muscle names (the user explicitly asked to "look for proper muscle names, build the list even more"; a draft list exists in the plan file at `C:\Users\krish\.claude\plans\1-i-should-be-foamy-engelbart.md` but hasn't been finalized or wired in).
+- ~~**Canonical muscle taxonomy**~~ — **done, see "RESOLVED — Canonical muscle taxonomy" near the top of this document.**
 - **Exercise alternatives** — user explicitly asked for interchangeable-exercise groups (example given: Face Pulls ↔ Reverse Pec Deck Fly, as a fallback when a machine is unavailable). Planned schema: `exercises.alternativeGroupId` (nullable int; exercises sharing a group id are considered interchangeable), plus a "⇄ swap" affordance in the exercise-log UI. Not started.
 - **`exercises.priority`** (int, lower = do first) — for ordering a day's exercise list by fatigue-management logic (compounds before isolations). Not started.
-- **Custom-exercise creation form field parity** — the quick "+ Custom exercise" form in the main workout card currently only asks for name/sets/reps, while the manage-panel's edit form has muscle group, tracking type, etc. The user asked for these to have full parity (muscle picker, rest seconds, priority, inline tutorial links) — not started, and blocked behind finishing the current compile-error fixes first.
+- **Custom-exercise creation form field parity** — the quick "+ Custom exercise" form in the main workout card currently only asks for name/sets/reps, while the manage-panel's edit form has muscle group (now the new taxonomy dropdown), tracking type, etc. The user asked for these to have full parity (muscle picker, rest seconds, priority, inline tutorial links) — not started.
 
 ## What's NOT done yet (Phases 4 and 5, entirely unstarted, come after Phase 3)
 
@@ -402,15 +414,16 @@ All of the above (everything except this HANDOFF.md itself) was committed as `7e
 
 ## Immediate next step for a new session picking this up
 
-**Everything numbered below is done as of 2026-09-19** — the outage fix (commit `7e88e79`) and the Manage Plans UI (commit `8bc2bd8`), both deployed and verified clean on `fitkr.vercel.app`. Kept as a record of the process followed. **Start at the bottom, "← Start here."**
+**Everything numbered below is done as of 2026-09-19** — the outage fix (`7e88e79`), the Manage Plans UI (`8bc2bd8`), and the canonical muscle taxonomy (`29b3997`), all deployed and verified clean on `fitkr.vercel.app`. Kept as a record of the process followed. **Start at the bottom, "← Start here."**
 
 1. ~~Read this entire document.~~ (still do this first, always)
 2. ~~Open `src/app/page.tsx` and work through the seven numbered items in the "NOT yet done" list above.~~ Done — see the "Frontend status: DONE" section.
 3. ~~Run `npx tsc --noEmit` and confirm it drops to zero errors.~~ Done, confirmed clean.
 4. ~~Run `rm -rf .next && npm run build` and confirm a clean production build.~~ Done.
 5. ~~Smoke-test locally via `next start` against the real DB.~~ Done — see the verification list under "RESOLVED".
-6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`, then `8bc2bd8` for the Manage Plans UI.
-7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done for both commits.
+6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`, `8bc2bd8`, `29b3997`.
+7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done for all three.
 8. ~~Build the Manage Plans UI.~~ Done — see "RESOLVED — Manage Plans UI" near the top.
-9. **← Start here.** Ask the user which Phase 3 sub-item to pick up next (canonical muscle taxonomy, exercise alternatives, `exercises.priority`, custom-exercise form parity — see "Phase 3 sub-items not yet started" above) or whether to move to Phase 4 (dashboard/calendar) or Phase 5 (theming) instead — do not assume.
-10. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
+9. ~~Build the canonical muscle taxonomy.~~ Done — see "RESOLVED — Canonical muscle taxonomy" near the top.
+10. **← Start here.** Ask the user which Phase 3 sub-item to pick up next (exercise alternatives / `alternativeGroupId`, `exercises.priority`, custom-exercise form parity — see "Phase 3 sub-items not yet started" above) or whether to move to Phase 4 (dashboard/calendar) or Phase 5 (theming) instead — do not assume.
+11. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
