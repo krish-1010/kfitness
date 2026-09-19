@@ -7,24 +7,7 @@ import { muscleGroupsToBodyData } from "@/lib/muscleSlug";
 import { muscleGroupsToBodyMusclesState, muscleGroupsToFullBodyMusclesState } from "@/lib/muscleBodyMuscles";
 import { MUSCLE_TAXONOMY } from "@/lib/muscleTaxonomy";
 import { useDate } from "./_lib/DateContext";
-import {
-  ink,
-  inkDim,
-  bg,
-  bg2,
-  line,
-  amber,
-  green,
-  red,
-  cardStyle,
-  inputStyle,
-  smallInputStyle,
-  primaryBtn,
-  secondaryBtn,
-  tinyBtn,
-  sectionLabel,
-  navBtn,
-} from "./_components/shared";
+import { CenteredLoading } from "./_components/shared";
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -93,38 +76,29 @@ type WorkoutState = {
 };
 
 // Rough color family per muscle group prefix, purely visual grouping, not
-// scientific. Falls back to amber for anything unmapped.
-function muscleColor(muscleGroup: string): string {
+// scientific. Falls back to a muted badge for anything unmapped.
+function muscleBadgeClass(muscleGroup: string): string {
   const g = muscleGroup.toLowerCase();
-  if (g.startsWith("chest") || g.startsWith("shoulder") || g.startsWith("tricep")) return amber;
-  if (g.startsWith("back") || g.startsWith("bicep") || g.startsWith("forearm") || g.startsWith("trap")) return "#6B9BC1";
+  if (g.startsWith("chest") || g.startsWith("shoulder") || g.startsWith("tricep")) return "badge-primary";
+  if (g.startsWith("back") || g.startsWith("bicep") || g.startsWith("forearm") || g.startsWith("trap")) return "badge-info";
   if (g.startsWith("quad") || g.startsWith("hamstring") || g.startsWith("glute") || g.startsWith("calf") || g.startsWith("adductor") || g.startsWith("abductor"))
-    return green;
-  if (g.startsWith("core") || g.startsWith("lower back")) return "#A67FB5";
-  return inkDim;
+    return "badge-success";
+  if (g.startsWith("core") || g.startsWith("lower back")) return "badge-info2";
+  return "badge-muted";
 }
 
 function MuscleBadge({ muscleGroup, onClick, linkCount }: { muscleGroup: string; onClick?: () => void; linkCount?: number }) {
   if (!muscleGroup) return null;
-  const color = muscleColor(muscleGroup);
-  const style = {
-    fontSize: 10,
-    color,
-    border: `1px solid ${color}55`,
-    padding: "1px 5px",
-    whiteSpace: "nowrap" as const,
-    background: "none",
-    cursor: onClick ? "pointer" : "default",
-  };
+  const className = `badge ${muscleBadgeClass(muscleGroup)}`;
   const label = linkCount ? `${muscleGroup} · ▶${linkCount}` : muscleGroup;
-  if (!onClick) return <span style={style}>{label}</span>;
+  if (!onClick) return <span className={className}>{label}</span>;
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      style={style}
+      className={className}
     >
       {label}
     </button>
@@ -172,20 +146,25 @@ function MuscleBodyView({ muscleGroups, full, size = 130 }: { muscleGroups: stri
     const bodyState = full ? muscleGroupsToFullBodyMusclesState(muscleGroups) : muscleGroupsToBodyMusclesState(muscleGroups);
     if (Object.keys(bodyState).length === 0) return null;
     return (
-      <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+      <div className="flex justify-center gap-2">
         <BodyMusclesPane side="front" bodyState={bodyState} size={size} />
         <BodyMusclesPane side="back" bodyState={bodyState} size={size} />
       </div>
     );
   }
 
+  // Dormant fallback — MUSCLE_DIAGRAM_BACKEND is hardcoded to "body-muscles"
+  // above, so this branch never actually renders today. Its colors are
+  // fixed hex matching the dark theme's original palette rather than theme
+  // tokens, since making it theme-aware is only worth doing if this
+  // constant is ever flipped back (see the plan's dormant-fallback note).
   const data = full ? muscleGroupsToBodyData(muscleGroups).map((d) => ({ ...d, intensity: 3 })) : muscleGroupsToBodyData(muscleGroups);
   if (data.length === 0) return null;
   const scale = size / 240;
   return (
-    <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
-      <Body data={data} side="front" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
-      <Body data={data} side="back" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
+    <div className="flex justify-center gap-2">
+      <Body data={data} side="front" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", "#D4922C"]} defaultFill="#15140F" border="#2C2A22" />
+      <Body data={data} side="back" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", "#D4922C"]} defaultFill="#15140F" border="#2C2A22" />
     </div>
   );
 }
@@ -237,40 +216,34 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
   };
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 30, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: bg2, border: `1px solid ${line}`, maxWidth: 380, width: "100%", maxHeight: "85vh", overflowY: "auto", padding: 16 }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>{target.name}</div>
-          <button onClick={onClose} style={{ background: "none", border: `1px solid ${line}`, color: inkDim, padding: "2px 8px" }}>
+    <div onClick={onClose} className="modal-overlay z-30">
+      <div onClick={(e) => e.stopPropagation()} className="bg-card border border-border max-w-[380px] w-full max-h-[85vh] overflow-y-auto p-4">
+        <div className="flex justify-between items-center mb-2">
+          <div className="font-semibold text-[15px]">{target.name}</div>
+          <button onClick={onClose} className="bg-transparent border border-border text-muted-foreground px-2 py-0.5">
             ✕
           </button>
         </div>
         <MuscleBadge muscleGroup={target.muscleGroup} />
 
-        <div style={{ margin: "14px 0" }}>
+        <div className="my-3.5">
           <MuscleBodyView muscleGroups={[target.muscleGroup]} full size={140} />
         </div>
 
-        <div style={{ fontSize: 11, color: inkDim, marginBottom: 6, letterSpacing: 0.3 }}>TUTORIAL LINKS</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: target.manage ? 10 : 0 }}>
+        <div className="text-[11px] text-muted-foreground mb-1.5 tracking-wide">TUTORIAL LINKS</div>
+        <div className={`flex flex-col gap-1.5 ${target.manage ? "mb-2.5" : ""}`}>
           {links === null ? (
-            <span style={{ fontSize: 12, color: inkDim }}>Loading…</span>
+            <span className="text-xs text-muted-foreground">Loading…</span>
           ) : links.length === 0 ? (
-            <span style={{ fontSize: 12, color: inkDim }}>No tutorial links yet</span>
+            <span className="text-xs text-muted-foreground">No tutorial links yet</span>
           ) : (
             links.map((l) => (
-              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                <a href={l.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: amber }}>
+              <div key={l.id} className="flex justify-between items-center gap-1.5">
+                <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-[13px] text-primary">
                   {l.label || l.url}
                 </a>
                 {target.manage && (
-                  <button onClick={() => removeLink(l.id)} style={{ background: "none", border: "none", color: inkDim, fontSize: 12, padding: 2 }}>
+                  <button onClick={() => removeLink(l.id)} className="bg-transparent border-none text-muted-foreground text-xs p-0.5">
                     ✕
                   </button>
                 )}
@@ -279,15 +252,10 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
           )}
         </div>
         {target.manage && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
-            <input
-              placeholder="Label (e.g. Form check)"
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              style={smallInputStyle}
-            />
-            <input placeholder="URL" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} style={smallInputStyle} />
-            <button onClick={addLink} style={{ ...secondaryBtn }}>
+          <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
+            <input placeholder="Label (e.g. Form check)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} className="input-sm" />
+            <input placeholder="URL" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} className="input-sm" />
+            <button onClick={addLink} className="btn-secondary">
               + Add link
             </button>
           </div>
@@ -305,15 +273,12 @@ function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
   if (!hasMuscleDiagramData(muscleGroups)) return null;
 
   return (
-    <div style={{ marginBottom: 10 }}>
-      <button
-        onClick={() => setShown((v) => !v)}
-        style={{ fontSize: 11, color: inkDim, background: "none", border: `1px solid ${line}`, padding: "4px 8px", cursor: "pointer" }}
-      >
+    <div className="mb-2.5">
+      <button onClick={() => setShown((v) => !v)} className="btn-tiny">
         {shown ? "Hide" : "👁 Muscles worked today"}
       </button>
       {shown && (
-        <div style={{ marginTop: 8 }}>
+        <div className="mt-2">
           <MuscleBodyView muscleGroups={muscleGroups} size={80} />
         </div>
       )}
@@ -763,13 +728,7 @@ export default function WorkoutPage() {
     await refreshAfterPlanChange();
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
-        Loading…
-      </div>
-    );
-  }
+  if (loading) return <CenteredLoading />;
 
   const exDoneCount = workout.log.filter((r) => r.done).length;
 
@@ -811,31 +770,30 @@ export default function WorkoutPage() {
     <div>
       {/* ---- Workout / exercise section ---- */}
       <div
-        style={{
-          background: workout.planDayId === null ? bg2 : `linear-gradient(135deg, ${bg2}, ${bg})`,
-          border: `1px solid ${workout.planDayId === null ? line : amber + "55"}`,
-          padding: "14px 16px",
-          marginBottom: 12,
-        }}
+        className={`py-3.5 px-4 mb-3 border ${
+          workout.planDayId === null
+            ? "bg-card border-border"
+            : "bg-[linear-gradient(135deg,var(--card),var(--background))] border-primary/33"
+        }`}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: workout.planDayId !== null ? 12 : 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ fontSize: 20 }}>{workout.planDayId === null ? "💤" : "🏋️"}</div>
+        <div className={`flex items-center justify-between ${workout.planDayId !== null ? "mb-3" : ""}`}>
+          <div className="flex items-center gap-3">
+            <div className="text-xl">{workout.planDayId === null ? "💤" : "🏋️"}</div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>
+              <div className="text-base font-semibold">
                 {workout.planDayId === null ? "Rest day" : `${workout.label} day`}
                 {workout.variant && (
-                  <span style={{ fontSize: 11, color: amber, fontWeight: 400 }}>
+                  <span className="text-[11px] text-primary font-normal">
                     {" "}
                     · {workout.variant === "strength" ? "Strength" : "Hypertrophy"}
                   </span>
                 )}
-                {workout.suggested && <span style={{ fontSize: 11, color: inkDim, fontWeight: 400 }}> · suggested</span>}
-                {workout.status === "done" && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}> · done</span>}
-                {workout.status === "skipped" && <span style={{ fontSize: 11, color: red, fontWeight: 400 }}> · skipped</span>}
+                {workout.suggested && <span className="text-[11px] text-muted-foreground font-normal"> · suggested</span>}
+                {workout.status === "done" && <span className="text-[11px] text-success font-normal"> · done</span>}
+                {workout.status === "skipped" && <span className="text-[11px] text-destructive font-normal"> · skipped</span>}
               </div>
               {workout.planDayId !== null && (
-                <div style={{ fontSize: 12, color: inkDim }}>
+                <div className="text-xs text-muted-foreground">
                   {exDoneCount}/{workout.log.length || 0} exercises done
                 </div>
               )}
@@ -847,7 +805,7 @@ export default function WorkoutPage() {
               const v = e.target.value;
               loadWorkout(date, v === "rest" ? "rest" : Number(v));
             }}
-            style={{ ...smallInputStyle, width: "auto" }}
+            className="input-sm w-auto"
           >
             {planDaysList.map((day) => (
               <option key={day.id} value={String(day.id)}>
@@ -861,40 +819,14 @@ export default function WorkoutPage() {
         {workout.planDayId !== null && (
           <>
             {workout.log.length > 0 && (
-              <div style={{ border: `1px solid ${line}`, marginBottom: 10 }}>
-                {workout.log.map((row, idx) => (
-                  <div
-                    key={row.id}
-                    style={{
-                      padding: "8px 10px",
-                      borderBottom: idx < workout.log.length - 1 ? `1px solid ${line}` : "none",
-                      background: bg,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <button
-                        onClick={() => updateLogRow(row.id, !row.done)}
-                        style={{
-                          width: 18,
-                          height: 18,
-                          border: `1.5px solid ${row.done ? green : line}`,
-                          background: row.done ? green : "transparent",
-                          flexShrink: 0,
-                          color: bg,
-                          fontWeight: 700,
-                          fontSize: 11,
-                        }}
-                      >
+              <div className="border border-border mb-2.5">
+                {workout.log.map((row) => (
+                  <div key={row.id} className="list-row bg-background">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <button onClick={() => updateLogRow(row.id, !row.done)} className={`checkbox ${row.done ? "checkbox-done" : ""}`}>
                         {row.done ? "✓" : ""}
                       </button>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          flex: 1,
-                          textDecoration: row.done ? "line-through" : "none",
-                          color: row.done ? inkDim : ink,
-                        }}
-                      >
+                      <span className={`text-[13px] flex-1 ${row.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
                         {row.name}
                       </span>
                       <MuscleBadge
@@ -911,7 +843,7 @@ export default function WorkoutPage() {
                             if (e.target.value) swapExercise(row.id, Number(e.target.value));
                           }}
                           title="Swap for an alternative exercise"
-                          style={{ ...smallInputStyle, width: "auto", padding: "2px 4px", fontSize: 11 }}
+                          className="input-sm w-auto py-0.5 px-1 text-[11px]"
                         >
                           <option value="">⇄</option>
                           {row.alternatives.map((alt) => (
@@ -921,15 +853,15 @@ export default function WorkoutPage() {
                           ))}
                         </select>
                       )}
-                      <button onClick={() => removeLogRow(row.id)} style={{ background: "none", border: "none", color: inkDim, padding: 2 }}>
+                      <button onClick={() => removeLogRow(row.id)} className="bg-transparent border-none text-muted-foreground p-0.5">
                         ✕
                       </button>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingLeft: 26 }}>
+                    <div className="flex flex-col gap-1 pl-[26px]">
                       {row.sets.map((set) =>
                         row.trackingType === "duration_distance" ? (
-                          <div key={set.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: inkDim, width: 14 }}>{set.setNumber}</span>
+                          <div key={set.id} className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-muted-foreground w-3.5">{set.setNumber}</span>
                             <input
                               type="number"
                               step={0.5}
@@ -941,7 +873,7 @@ export default function WorkoutPage() {
                                   durationSeconds: e.target.value === "" ? null : Math.round(parseFloat(e.target.value) * 60),
                                 })
                               }
-                              style={{ ...smallInputStyle, width: 60, textAlign: "center" }}
+                              className="input-sm w-[60px] text-center"
                             />
                             <input
                               type="number"
@@ -954,36 +886,30 @@ export default function WorkoutPage() {
                                   distanceMeters: e.target.value === "" ? null : parseFloat(e.target.value) * 1000,
                                 })
                               }
-                              style={{ ...smallInputStyle, width: 60, textAlign: "center" }}
+                              className="input-sm w-[60px] text-center"
                             />
-                            <button
-                              onClick={() => removeSetRow(row.id, set.id)}
-                              style={{ background: "none", border: "none", color: inkDim, padding: 2, marginLeft: "auto" }}
-                            >
+                            <button onClick={() => removeSetRow(row.id, set.id)} className="bg-transparent border-none text-muted-foreground p-0.5 ml-auto">
                               ✕
                             </button>
                           </div>
                         ) : (
-                          <div key={set.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 11, color: inkDim, width: 14 }}>{set.setNumber}</span>
+                          <div key={set.id} className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-muted-foreground w-3.5">{set.setNumber}</span>
                             <input
                               value={set.reps ?? ""}
                               placeholder={row.defaultReps ?? "reps"}
                               onChange={(e) => updateSetRow(row.id, set.id, { reps: e.target.value })}
-                              style={{ ...smallInputStyle, width: 55, textAlign: "center" }}
+                              className="input-sm w-[55px] text-center"
                             />
                             <input
                               type="number"
                               step={0.5}
                               value={set.weight ?? ""}
                               onChange={(e) => updateSetRow(row.id, set.id, { weight: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                              style={{ ...smallInputStyle, width: 55, textAlign: "center" }}
+                              className="input-sm w-[55px] text-center"
                               placeholder="kg"
                             />
-                            <button
-                              onClick={() => removeSetRow(row.id, set.id)}
-                              style={{ background: "none", border: "none", color: inkDim, padding: 2, marginLeft: "auto" }}
-                            >
+                            <button onClick={() => removeSetRow(row.id, set.id)} className="bg-transparent border-none text-muted-foreground p-0.5 ml-auto">
                               ✕
                             </button>
                           </div>
@@ -991,7 +917,7 @@ export default function WorkoutPage() {
                       )}
                       <button
                         onClick={() => addSetRow(row.id)}
-                        style={{ alignSelf: "flex-start", fontSize: 11, color: inkDim, background: "none", border: `1px dashed ${line}`, padding: "2px 8px", marginTop: 2 }}
+                        className="self-start text-[11px] text-muted-foreground bg-transparent border border-dashed border-border px-2 py-0.5 mt-0.5"
                       >
                         + set
                       </button>
@@ -1009,18 +935,15 @@ export default function WorkoutPage() {
             />
 
             {exerciseOptions.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
                 {exerciseOptions
                   .filter((ex) => !workout.log.some((r) => r.exerciseId === ex.id))
                   .map((ex) => (
-                    <div key={ex.id} style={{ ...tinyBtn, borderStyle: "dashed", display: "flex", alignItems: "center", gap: 5, padding: 0 }}>
-                      <button
-                        onClick={() => addExerciseToLog(ex)}
-                        style={{ background: "none", border: "none", color: "inherit", font: "inherit", padding: "5px 8px", cursor: "pointer" }}
-                      >
+                    <div key={ex.id} className="bg-transparent border border-dashed border-border text-muted-foreground text-xs flex items-center gap-1.5">
+                      <button onClick={() => addExerciseToLog(ex)} className="bg-transparent border-none text-inherit font-inherit px-2 py-1.5">
                         + {ex.name}
                       </button>
-                      <span style={{ paddingRight: 6 }}>
+                      <span className="pr-1.5">
                         <MuscleBadge
                           muscleGroup={ex.muscleGroup}
                           linkCount={ex.linkCount}
@@ -1033,22 +956,22 @@ export default function WorkoutPage() {
             )}
 
             {!showCustomExercise ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setShowCustomExercise(true)} style={{ ...secondaryBtn, flex: 1 }}>
+              <div className="flex gap-2">
+                <button onClick={() => setShowCustomExercise(true)} className="btn-secondary flex-1">
                   + Custom exercise
                 </button>
-                <button onClick={() => commitSession(workout.planDayId, "done")} style={primaryBtn}>
+                <button onClick={() => commitSession(workout.planDayId, "done")} className="btn-primary">
                   Mark day done
                 </button>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <input placeholder="Exercise name" value={customExName} onChange={(e) => setCustomExName(e.target.value)} style={inputStyle} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input placeholder="Sets" value={customExSets} onChange={(e) => setCustomExSets(e.target.value)} style={inputStyle} />
-                  <input placeholder="Reps (e.g. 8-12)" value={customExReps} onChange={(e) => setCustomExReps(e.target.value)} style={inputStyle} />
+              <div className="flex flex-col gap-2">
+                <input placeholder="Exercise name" value={customExName} onChange={(e) => setCustomExName(e.target.value)} className="input" />
+                <div className="flex gap-2">
+                  <input placeholder="Sets" value={customExSets} onChange={(e) => setCustomExSets(e.target.value)} className="input" />
+                  <input placeholder="Reps (e.g. 8-12)" value={customExReps} onChange={(e) => setCustomExReps(e.target.value)} className="input" />
                 </div>
-                <select value={customExMuscleGroup} onChange={(e) => setCustomExMuscleGroup(e.target.value)} style={inputStyle}>
+                <select value={customExMuscleGroup} onChange={(e) => setCustomExMuscleGroup(e.target.value)} className="input">
                   <option value="">— muscle group —</option>
                   {MUSCLE_TAXONOMY.map((g) => (
                     <optgroup key={g.group} label={g.group}>
@@ -1060,19 +983,19 @@ export default function WorkoutPage() {
                     </optgroup>
                   ))}
                 </select>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input placeholder="Rest (sec)" value={customExRestSeconds} onChange={(e) => setCustomExRestSeconds(e.target.value)} style={inputStyle} />
-                  <input placeholder="Priority" title="Lower = do first" value={customExPriority} onChange={(e) => setCustomExPriority(e.target.value)} style={inputStyle} />
+                <div className="flex gap-2">
+                  <input placeholder="Rest (sec)" value={customExRestSeconds} onChange={(e) => setCustomExRestSeconds(e.target.value)} className="input" />
+                  <input placeholder="Priority" title="Lower = do first" value={customExPriority} onChange={(e) => setCustomExPriority(e.target.value)} className="input" />
                 </div>
-                <select value={customExTrackingType} onChange={(e) => setCustomExTrackingType(e.target.value as TrackingType)} style={inputStyle}>
+                <select value={customExTrackingType} onChange={(e) => setCustomExTrackingType(e.target.value as TrackingType)} className="input">
                   <option value="reps_weight">Sets × reps × weight</option>
                   <option value="duration_distance">Duration / distance (cardio)</option>
                 </select>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={addCustomExercise} style={{ ...primaryBtn, flex: 1 }}>
+                <div className="flex gap-2">
+                  <button onClick={addCustomExercise} className="btn-primary flex-1">
                     Add
                   </button>
-                  <button onClick={() => setShowCustomExercise(false)} style={{ ...secondaryBtn, flex: 1 }}>
+                  <button onClick={() => setShowCustomExercise(false)} className="btn-secondary flex-1">
                     Cancel
                   </button>
                 </div>
@@ -1082,19 +1005,19 @@ export default function WorkoutPage() {
         )}
 
         {workout.planDayId === null && workout.status !== "rest" && (
-          <button onClick={() => commitSession(null, "rest", true)} style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}>
+          <button onClick={() => commitSession(null, "rest", true)} className="btn-secondary mt-2.5 w-full">
             Confirm rest day
           </button>
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div className="flex gap-2 mb-5">
         <button
           onClick={() => {
             setShowManageExercises((v) => !v);
             if (!showManageExercises) loadAllExercises();
           }}
-          style={{ ...tinyBtn, flex: 1 }}
+          className="btn-tiny flex-1"
         >
           {showManageExercises ? "Hide" : "Manage"} exercise library
         </button>
@@ -1104,7 +1027,7 @@ export default function WorkoutPage() {
             setProgramPage(0);
             loadAllExercises();
           }}
-          style={{ ...tinyBtn, flex: 1 }}
+          className="btn-tiny flex-1"
         >
           Full program table
         </button>
@@ -1114,7 +1037,7 @@ export default function WorkoutPage() {
             setPlanActionError(null);
             loadPlans();
           }}
-          style={{ ...tinyBtn, flex: 1 }}
+          className="btn-tiny flex-1"
         >
           Manage plans
         </button>
@@ -1133,54 +1056,38 @@ export default function WorkoutPage() {
               return blockDiff !== 0 ? blockDiff : a.priority - b.priority;
             });
           return (
-            <div style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 10, overflowY: "auto" }}>
-              <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 12px 20px" }}>
-                <div
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    background: bg,
-                    zIndex: 1,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "14px 0 10px",
-                  }}
-                >
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>Full PPL Program</div>
-                  <button onClick={() => setShowFullProgram(false)} style={navBtn}>
+            <div className="fixed inset-0 bg-black/80 z-10 overflow-y-auto">
+              <div className="max-w-[640px] mx-auto px-3 pb-5">
+                <div className="sticky top-0 bg-background z-[1] flex justify-between items-center py-3.5 pb-2.5">
+                  <div className="text-base font-semibold">Full PPL Program</div>
+                  <button onClick={() => setShowFullProgram(false)} className="nav-btn">
                     ✕
                   </button>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <button onClick={() => setProgramPage((p) => Math.max(0, p - 1))} disabled={programPage === 0} style={navBtn}>
+                <div className="flex items-center justify-between mb-2.5">
+                  <button onClick={() => setProgramPage((p) => Math.max(0, p - 1))} disabled={programPage === 0} className="nav-btn">
                     ‹
                   </button>
-                  <div style={{ fontSize: 12, color: inkDim }}>
+                  <div className="text-xs text-muted-foreground">
                     {programPage + 1} / {programSections.length}
                   </div>
                   <button
                     onClick={() => setProgramPage((p) => Math.min(programSections.length - 1, p + 1))}
                     disabled={programPage === programSections.length - 1}
-                    style={navBtn}
+                    className="nav-btn"
                   >
                     ›
                   </button>
                 </div>
 
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ background: amber + "22", color: amber, fontWeight: 600, padding: 6, fontSize: 12, border: `1px solid ${line}` }}>
-                    {label}
-                  </div>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <div className="mb-5">
+                  <div className="bg-primary/13 text-primary font-semibold p-1.5 text-xs border border-border">{label}</div>
+                  <table className="w-full border-collapse text-[11px]">
                     <thead>
                       <tr>
                         {["Exercise", "Muscle", "Sets", "Reps", "Rest"].map((h) => (
-                          <th
-                            key={h}
-                            style={{ border: `1px solid ${line}`, padding: "4px 6px", textAlign: "left", background: bg2, color: inkDim, fontSize: 10 }}
-                          >
+                          <th key={h} className="border border-border px-1.5 py-1 text-left bg-card text-muted-foreground text-[10px]">
                             {h}
                           </th>
                         ))}
@@ -1189,20 +1096,20 @@ export default function WorkoutPage() {
                     <tbody>
                       {sessionExercises.map((ex) => (
                         <tr key={ex.id}>
-                          <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>
+                          <td className="border border-border px-1.5 py-1">
                             {ex.name}
-                            {ex.block !== "main" && <span style={{ color: inkDim }}> · {ex.block}</span>}
+                            {ex.block !== "main" && <span className="text-muted-foreground"> · {ex.block}</span>}
                           </td>
-                          <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>
+                          <td className="border border-border px-1.5 py-1">
                             <MuscleBadge
                               muscleGroup={ex.muscleGroup}
                               linkCount={ex.linkCount}
                               onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: false })}
                             />
                           </td>
-                          <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.defaultSets}</td>
-                          <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.defaultReps}</td>
-                          <td style={{ border: `1px solid ${line}`, padding: "4px 6px" }}>{ex.restSeconds ? `${ex.restSeconds}s` : "—"}</td>
+                          <td className="border border-border px-1.5 py-1">{ex.defaultSets}</td>
+                          <td className="border border-border px-1.5 py-1">{ex.defaultReps}</td>
+                          <td className="border border-border px-1.5 py-1">{ex.restSeconds ? `${ex.restSeconds}s` : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1214,72 +1121,59 @@ export default function WorkoutPage() {
         })()}
 
       {showManagePlans && (
-        <div style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 10, overflowY: "auto" }}>
-          <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 12px 20px" }}>
-            <div
-              style={{
-                position: "sticky",
-                top: 0,
-                background: bg,
-                zIndex: 1,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "14px 0 10px",
-              }}
-            >
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Manage Plans</div>
-              <button onClick={() => setShowManagePlans(false)} style={navBtn}>
+        <div className="fixed inset-0 bg-black/80 z-10 overflow-y-auto">
+          <div className="max-w-[640px] mx-auto px-3 pb-5">
+            <div className="sticky top-0 bg-background z-[1] flex justify-between items-center py-3.5 pb-2.5">
+              <div className="text-base font-semibold">Manage Plans</div>
+              <button onClick={() => setShowManagePlans(false)} className="nav-btn">
                 ✕
               </button>
             </div>
 
             {planActionError && (
-              <div style={{ background: red + "22", color: red, padding: "8px 10px", fontSize: 12, marginBottom: 12, border: `1px solid ${red}55` }}>
-                {planActionError}
-              </div>
+              <div className="bg-destructive/13 text-destructive px-2.5 py-2 text-xs mb-3 border border-destructive/33">{planActionError}</div>
             )}
 
             {plansList.map((plan) => (
-              <div key={plan.id} style={{ ...cardStyle, marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+              <div key={plan.id} className="card mb-3">
+                <div className="flex justify-between items-center mb-2.5 gap-2 flex-wrap">
                   {editingPlanNameId === plan.id ? (
-                    <div style={{ display: "flex", gap: 6, flex: 1, minWidth: 160 }}>
-                      <input value={planNameEdit} onChange={(e) => setPlanNameEdit(e.target.value)} style={{ ...smallInputStyle, flex: 1 }} />
-                      <button onClick={() => savePlanName(plan.id)} style={tinyBtn}>
+                    <div className="flex gap-1.5 flex-1 min-w-[160px]">
+                      <input value={planNameEdit} onChange={(e) => setPlanNameEdit(e.target.value)} className="input-sm flex-1" />
+                      <button onClick={() => savePlanName(plan.id)} className="btn-tiny">
                         Save
                       </button>
-                      <button onClick={() => setEditingPlanNameId(null)} style={tinyBtn}>
+                      <button onClick={() => setEditingPlanNameId(null)} className="btn-tiny">
                         Cancel
                       </button>
                     </div>
                   ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{plan.name}</span>
-                      {plan.isActive && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}>· active</span>}
-                      <button onClick={() => startEditPlanName(plan)} style={tinyBtn}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[15px] font-semibold">{plan.name}</span>
+                      {plan.isActive && <span className="text-[11px] text-success font-normal">· active</span>}
+                      <button onClick={() => startEditPlanName(plan)} className="btn-tiny">
                         Rename
                       </button>
                     </div>
                   )}
-                  <div style={{ display: "flex", gap: 6 }}>
+                  <div className="flex gap-1.5">
                     {!plan.isActive && (
-                      <button onClick={() => activatePlan(plan.id)} style={{ ...tinyBtn, color: amber, borderColor: amber + "55" }}>
+                      <button onClick={() => activatePlan(plan.id)} className="btn-tiny text-primary border-primary/33">
                         Activate
                       </button>
                     )}
-                    <button onClick={() => archivePlan(plan.id)} style={tinyBtn}>
+                    <button onClick={() => archivePlan(plan.id)} className="btn-tiny">
                       Archive
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12, color: inkDim }}>
+                <div className="flex items-center gap-2 mb-2.5 text-xs text-muted-foreground">
                   Fixed rest day:
                   <select
                     value={plan.fixedRestWeekday === null ? "" : String(plan.fixedRestWeekday)}
                     onChange={(e) => setPlanRestWeekday(plan.id, e.target.value === "" ? null : Number(e.target.value))}
-                    style={{ ...smallInputStyle, width: "auto" }}
+                    className="input-sm w-auto"
                   >
                     <option value="">None</option>
                     {WEEKDAY_NAMES.map((wd, i) => (
@@ -1290,52 +1184,49 @@ export default function WorkoutPage() {
                   </select>
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <div className="flex flex-col gap-1.5 mb-2.5">
                   {plan.days.map((day, idx) => (
-                    <div
-                      key={day.id}
-                      style={{ display: "flex", alignItems: "center", gap: 6, background: bg, border: `1px solid ${line}`, padding: "6px 8px", flexWrap: "wrap" }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        <button onClick={() => moveDay(plan.id, day.id, -1)} disabled={idx === 0} style={{ ...tinyBtn, padding: "0 6px", fontSize: 10, lineHeight: "14px" }}>
+                    <div key={day.id} className="flex items-center gap-1.5 bg-background border border-border py-1.5 px-2 flex-wrap">
+                      <div className="flex flex-col gap-0.5">
+                        <button onClick={() => moveDay(plan.id, day.id, -1)} disabled={idx === 0} className="btn-tiny px-1.5 text-[10px] leading-[14px]">
                           ▲
                         </button>
                         <button
                           onClick={() => moveDay(plan.id, day.id, 1)}
                           disabled={idx === plan.days.length - 1}
-                          style={{ ...tinyBtn, padding: "0 6px", fontSize: 10, lineHeight: "14px" }}
+                          className="btn-tiny px-1.5 text-[10px] leading-[14px]"
                         >
                           ▼
                         </button>
                       </div>
                       {editingDayId === day.id ? (
-                        <input value={dayLabelEdit} onChange={(e) => setDayLabelEdit(e.target.value)} style={{ ...smallInputStyle, flex: 1, minWidth: 100 }} />
+                        <input value={dayLabelEdit} onChange={(e) => setDayLabelEdit(e.target.value)} className="input-sm flex-1 min-w-[100px]" />
                       ) : (
-                        <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>{day.label}</span>
+                        <span className="text-[13px] flex-1 min-w-[100px]">{day.label}</span>
                       )}
                       <select
                         value={day.variantMode}
                         onChange={(e) => setDayVariantMode(plan.id, day.id, e.target.value as VariantMode)}
-                        style={{ ...smallInputStyle, width: "auto", fontSize: 11 }}
+                        className="input-sm w-auto text-[11px]"
                       >
                         <option value="none">No variants</option>
                         <option value="strength_hypertrophy">Strength/Hypertrophy</option>
                       </select>
                       {editingDayId === day.id ? (
                         <>
-                          <button onClick={() => saveDayLabel(plan.id, day.id)} style={tinyBtn}>
+                          <button onClick={() => saveDayLabel(plan.id, day.id)} className="btn-tiny">
                             Save
                           </button>
-                          <button onClick={() => setEditingDayId(null)} style={tinyBtn}>
+                          <button onClick={() => setEditingDayId(null)} className="btn-tiny">
                             Cancel
                           </button>
                         </>
                       ) : (
                         <>
-                          <button onClick={() => startEditDay(day)} style={tinyBtn}>
+                          <button onClick={() => startEditDay(day)} className="btn-tiny">
                             Rename
                           </button>
-                          <button onClick={() => removeDay(plan.id, day.id)} style={tinyBtn}>
+                          <button onClick={() => removeDay(plan.id, day.id)} className="btn-tiny">
                             Delete
                           </button>
                         </>
@@ -1344,53 +1235,53 @@ export default function WorkoutPage() {
                   ))}
                 </div>
 
-                <div style={{ display: "flex", gap: 6 }}>
+                <div className="flex gap-1.5">
                   <input
                     value={newDayLabelByPlan[plan.id] || ""}
                     onChange={(e) => setNewDayLabelByPlan((prev) => ({ ...prev, [plan.id]: e.target.value }))}
                     placeholder="New day label, e.g. Upper A"
-                    style={{ ...smallInputStyle, flex: 1 }}
+                    className="input-sm flex-1"
                   />
-                  <button onClick={() => addDayToPlan(plan.id)} style={tinyBtn}>
+                  <button onClick={() => addDayToPlan(plan.id)} className="btn-tiny">
                     + Add day
                   </button>
                 </div>
               </div>
             ))}
 
-            <div style={cardStyle}>
-              <div style={sectionLabel}>CREATE NEW PLAN</div>
+            <div className="card">
+              <div className="section-label">CREATE NEW PLAN</div>
               <input
                 value={newPlanName}
                 onChange={(e) => setNewPlanName(e.target.value)}
                 placeholder="Plan name, e.g. Upper/Lower"
-                style={{ ...inputStyle, width: "100%", marginBottom: 8, boxSizing: "border-box" }}
+                className="input mb-2"
               />
               {newPlanDayLabels.map((label, i) => (
-                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <div key={i} className="flex gap-1.5 mb-1.5">
                   <input
                     value={label}
                     onChange={(e) => setNewPlanDayLabels((prev) => prev.map((l, j) => (j === i ? e.target.value : l)))}
                     placeholder={`Day ${i + 1} label`}
-                    style={{ ...smallInputStyle, flex: 1 }}
+                    className="input-sm flex-1"
                   />
                   <button
                     onClick={() => setNewPlanDayLabels((prev) => prev.filter((_, j) => j !== i))}
                     disabled={newPlanDayLabels.length <= 1}
-                    style={tinyBtn}
+                    className="btn-tiny"
                   >
                     ✕
                   </button>
                 </div>
               ))}
-              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                <button onClick={() => setNewPlanDayLabels((prev) => [...prev, ""])} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+              <div className="flex gap-2 mb-2.5">
+                <button onClick={() => setNewPlanDayLabels((prev) => [...prev, ""])} className="btn-secondary flex-1 py-1.5 text-xs">
                   + Add day
                 </button>
                 <select
                   value={newPlanRestWeekday === null ? "" : String(newPlanRestWeekday)}
                   onChange={(e) => setNewPlanRestWeekday(e.target.value === "" ? null : Number(e.target.value))}
-                  style={{ ...smallInputStyle, width: "auto" }}
+                  className="input-sm w-auto"
                 >
                   <option value="">No fixed rest day</option>
                   {WEEKDAY_NAMES.map((wd, i) => (
@@ -1400,7 +1291,7 @@ export default function WorkoutPage() {
                   ))}
                 </select>
               </div>
-              <button onClick={createPlan} style={{ ...primaryBtn, width: "100%" }}>
+              <button onClick={createPlan} className="btn-primary w-full">
                 Create plan
               </button>
             </div>
@@ -1408,17 +1299,17 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 20 }}>
+      <div className="mb-5">
         {showManageExercises && (
           <>
             <input
               value={exerciseQuery}
               onChange={(e) => setExerciseQuery(e.target.value)}
               placeholder="Search exercises or muscle group…"
-              style={{ ...smallInputStyle, width: "100%", marginTop: 8, marginBottom: 8, boxSizing: "border-box" }}
+              className="input-sm mt-2 mb-2"
             />
-            <div style={{ border: `1px solid ${line}` }}>
-              {manageExerciseRows.map((row, idx) => {
+            <div className="border border-border">
+              {manageExerciseRows.map((row) => {
                 if (row.type === "header") {
                   const expanded = expandedPlanDays.has(row.key);
                   return (
@@ -1432,18 +1323,7 @@ export default function WorkoutPage() {
                           return next;
                         })
                       }
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        background: bg2,
-                        border: "none",
-                        borderBottom: `1px solid ${line}`,
-                        color: amber,
-                        fontWeight: 600,
-                        fontSize: 13,
-                        padding: "8px 10px",
-                        cursor: "pointer",
-                      }}
+                      className="w-full text-left bg-card border-none border-b border-border text-primary font-semibold text-[13px] px-2.5 py-2"
                     >
                       {expanded ? "▾" : "▸"} {row.label}
                     </button>
@@ -1451,136 +1331,134 @@ export default function WorkoutPage() {
                 }
                 const ex = row.ex;
                 return (
-              <div
-                key={ex.id}
-                style={{
-                  padding: "8px 10px",
-                  borderBottom: idx < manageExerciseRows.length - 1 ? `1px solid ${line}` : "none",
-                }}
-              >
-                {editingExId === ex.id ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <input value={exEdit.name} onChange={(e) => setExEdit({ ...exEdit, name: e.target.value })} style={smallInputStyle} />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <select
-                        value={exEdit.planDayId === null ? "" : String(exEdit.planDayId)}
-                        onChange={(e) => setExEdit({ ...exEdit, planDayId: Number(e.target.value) })}
-                        style={smallInputStyle}
-                      >
-                        {planDaysList.map((day) => (
-                          <option key={day.id} value={String(day.id)}>
-                            {day.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={exEdit.defaultSets}
-                        onChange={(e) => setExEdit({ ...exEdit, defaultSets: e.target.value })}
-                        style={{ ...smallInputStyle, width: 50 }}
-                      />
-                      <input
-                        value={exEdit.defaultReps}
-                        onChange={(e) => setExEdit({ ...exEdit, defaultReps: e.target.value })}
-                        style={{ ...smallInputStyle, width: 70 }}
-                      />
-                    </div>
-                    <select
-                      value={exEdit.muscleGroup}
-                      onChange={(e) => setExEdit({ ...exEdit, muscleGroup: e.target.value })}
-                      style={smallInputStyle}
-                    >
-                      <option value="">— none —</option>
-                      {MUSCLE_TAXONOMY.map((g) => (
-                        <optgroup key={g.group} label={g.group}>
-                          {g.options.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                    <select
-                      value={exEdit.trackingType}
-                      onChange={(e) => setExEdit({ ...exEdit, trackingType: e.target.value as TrackingType })}
-                      style={smallInputStyle}
-                    >
-                      <option value="reps_weight">Sets × reps × weight</option>
-                      <option value="duration_distance">Duration / distance (cardio)</option>
-                    </select>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <input
-                        value={exEdit.restSeconds}
-                        onChange={(e) => setExEdit({ ...exEdit, restSeconds: e.target.value })}
-                        placeholder="Rest (sec)"
-                        style={{ ...smallInputStyle, flex: 1 }}
-                      />
-                      <input
-                        value={exEdit.priority}
-                        onChange={(e) => setExEdit({ ...exEdit, priority: e.target.value })}
-                        placeholder="Priority"
-                        title="Lower = do first"
-                        style={{ ...smallInputStyle, flex: 1 }}
-                      />
-                    </div>
-                    <div style={{ fontSize: 11, color: inkDim }}>
-                      {ex.alternativeGroupId != null ? (
-                        <>
-                          Alternates with: {allExercises.filter((o) => o.alternativeGroupId === ex.alternativeGroupId && o.id !== ex.id).map((o) => o.name).join(", ") || "—"}{" "}
-                          <button onClick={() => unlinkAlternative(ex.id)} style={{ ...tinyBtn, padding: "1px 6px" }}>
-                            Unlink
-                          </button>
-                        </>
-                      ) : (
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            if (e.target.value) linkAlternative(ex.id, Number(e.target.value));
-                          }}
-                          style={smallInputStyle}
-                        >
-                          <option value="">+ Link alternative exercise…</option>
-                          {allExercises
-                            .filter((o) => o.planDayId === ex.planDayId && o.id !== ex.id && !o.archived)
-                            .map((o) => (
-                              <option key={o.id} value={o.id}>
-                                {o.name}
+                  <div key={ex.id} className="list-row">
+                    {editingExId === ex.id ? (
+                      <div className="flex flex-col gap-1.5">
+                        <input value={exEdit.name} onChange={(e) => setExEdit({ ...exEdit, name: e.target.value })} className="input-sm" />
+                        <div className="flex gap-1.5">
+                          <select
+                            value={exEdit.planDayId === null ? "" : String(exEdit.planDayId)}
+                            onChange={(e) => setExEdit({ ...exEdit, planDayId: Number(e.target.value) })}
+                            className="input-sm"
+                          >
+                            {planDaysList.map((day) => (
+                              <option key={day.id} value={String(day.id)}>
+                                {day.label}
                               </option>
                             ))}
+                          </select>
+                          <input
+                            value={exEdit.defaultSets}
+                            onChange={(e) => setExEdit({ ...exEdit, defaultSets: e.target.value })}
+                            className="input-sm w-[50px]"
+                          />
+                          <input
+                            value={exEdit.defaultReps}
+                            onChange={(e) => setExEdit({ ...exEdit, defaultReps: e.target.value })}
+                            className="input-sm w-[70px]"
+                          />
+                        </div>
+                        <select
+                          value={exEdit.muscleGroup}
+                          onChange={(e) => setExEdit({ ...exEdit, muscleGroup: e.target.value })}
+                          className="input-sm"
+                        >
+                          <option value="">— none —</option>
+                          {MUSCLE_TAXONOMY.map((g) => (
+                            <optgroup key={g.group} label={g.group}>
+                              {g.options.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
                         </select>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => saveEditEx(ex.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
-                        Save
-                      </button>
-                      <button onClick={() => setEditingExId(null)} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
-                        Cancel
-                      </button>
-                    </div>
+                        <select
+                          value={exEdit.trackingType}
+                          onChange={(e) => setExEdit({ ...exEdit, trackingType: e.target.value as TrackingType })}
+                          className="input-sm"
+                        >
+                          <option value="reps_weight">Sets × reps × weight</option>
+                          <option value="duration_distance">Duration / distance (cardio)</option>
+                        </select>
+                        <div className="flex gap-1.5">
+                          <input
+                            value={exEdit.restSeconds}
+                            onChange={(e) => setExEdit({ ...exEdit, restSeconds: e.target.value })}
+                            placeholder="Rest (sec)"
+                            className="input-sm flex-1"
+                          />
+                          <input
+                            value={exEdit.priority}
+                            onChange={(e) => setExEdit({ ...exEdit, priority: e.target.value })}
+                            placeholder="Priority"
+                            title="Lower = do first"
+                            className="input-sm flex-1"
+                          />
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {ex.alternativeGroupId != null ? (
+                            <>
+                              Alternates with: {allExercises.filter((o) => o.alternativeGroupId === ex.alternativeGroupId && o.id !== ex.id).map((o) => o.name).join(", ") || "—"}{" "}
+                              <button onClick={() => unlinkAlternative(ex.id)} className="btn-tiny px-1.5">
+                                Unlink
+                              </button>
+                            </>
+                          ) : (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) linkAlternative(ex.id, Number(e.target.value));
+                              }}
+                              className="input-sm"
+                            >
+                              <option value="">+ Link alternative exercise…</option>
+                              {allExercises
+                                .filter((o) => o.planDayId === ex.planDayId && o.id !== ex.id && !o.archived)
+                                .map((o) => (
+                                  <option key={o.id} value={o.id}>
+                                    {o.name}
+                                  </option>
+                                ))}
+                            </select>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => saveEditEx(ex.id)} className="btn-primary flex-1 py-1.5 text-xs">
+                            Save
+                          </button>
+                          <button onClick={() => setEditingExId(null)} className="btn-secondary flex-1 py-1.5 text-xs">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] flex items-center gap-1.5 flex-wrap">
+                          {ex.name} <span className="text-muted-foreground">· {planDayById[ex.planDayId]?.label ?? "?"} · {ex.defaultSets}×{ex.defaultReps}</span>
+                          {ex.alternativeGroupId != null && (
+                            <span className="text-[11px] text-primary" title="Has an interchangeable alternative">
+                              ⇄
+                            </span>
+                          )}
+                          <MuscleBadge
+                            muscleGroup={ex.muscleGroup}
+                            linkCount={ex.linkCount}
+                            onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: true })}
+                          />
+                        </span>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => startEditEx(ex)} className="btn-tiny">
+                            Edit
+                          </button>
+                          <button onClick={() => deleteEx(ex.id)} className="btn-tiny">
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                      {ex.name} <span style={{ color: inkDim }}>· {planDayById[ex.planDayId]?.label ?? "?"} · {ex.defaultSets}×{ex.defaultReps}</span>
-                      {ex.alternativeGroupId != null && <span style={{ fontSize: 11, color: amber }} title="Has an interchangeable alternative">⇄</span>}
-                      <MuscleBadge
-                        muscleGroup={ex.muscleGroup}
-                        linkCount={ex.linkCount}
-                        onClick={() => setDetailTarget({ id: ex.id, name: ex.name, muscleGroup: ex.muscleGroup, manage: true })}
-                      />
-                    </span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => startEditEx(ex)} style={tinyBtn}>
-                        Edit
-                      </button>
-                      <button onClick={() => deleteEx(ex.id)} style={tinyBtn}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
                 );
               })}
             </div>
