@@ -1,16 +1,20 @@
 import type { Slug } from "react-muscle-highlighter";
 
-// Maps this app's free-text muscleGroup strings (see seed-ppl-program.ts)
-// onto react-muscle-highlighter's fixed Slug set. The library has no
-// sub-head distinction (e.g. triceps lateral vs long head both light up
-// the same "triceps" region) and no dedicated "abductors" region — those
-// fold onto the closest real slug. Anything unmapped (e.g. "Full Body ·
-// Conditioning") is intentionally omitted from the diagram.
+// Maps this app's muscleGroup strings (see src/lib/muscleTaxonomy.ts for the
+// canonical list) onto react-muscle-highlighter's fixed Slug set. The library
+// has no sub-head distinction (e.g. triceps lateral vs long head both light
+// up the same "triceps" region) and no dedicated "abductors" or "hip flexors"
+// region — those either fold onto the closest real slug or are omitted.
+// Anything unmapped (e.g. "Full Body · Conditioning", "Hip Flexors") is
+// intentionally left off the diagram rather than forced onto a wrong region.
+// More specific entries (oblique, glute) are checked before their broader
+// parent prefix (core, abductor) since match order is first-hit.
 const PREFIX_TO_SLUG: [string, Slug][] = [
   ["chest", "chest"],
   ["shoulder", "deltoids"],
   ["tricep", "triceps"],
   ["bicep", "biceps"],
+  ["oblique", "obliques"],
   ["back", "upper-back"],
   ["trap", "trapezius"],
   ["forearm", "forearm"],
@@ -18,6 +22,7 @@ const PREFIX_TO_SLUG: [string, Slug][] = [
   ["lower back", "lower-back"],
   ["quad", "quadriceps"],
   ["hamstring", "hamstring"],
+  ["glute", "gluteal"],
   ["calve", "calves"],
   ["calf", "calves"],
   ["adductor", "adductors"],

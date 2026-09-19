@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Body from "react-muscle-highlighter";
 import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 import { muscleGroupsToBodyData } from "@/lib/muscleSlug";
+import { MUSCLE_TAXONOMY } from "@/lib/muscleTaxonomy";
 
 // Formats a Date using its LOCAL calendar fields, never toISOString() (which
 // converts to UTC first). In any positive-UTC-offset timezone like IST,
@@ -1644,12 +1645,22 @@ export default function App() {
                           style={{ ...smallInputStyle, width: 70 }}
                         />
                       </div>
-                      <input
+                      <select
                         value={exEdit.muscleGroup}
                         onChange={(e) => setExEdit({ ...exEdit, muscleGroup: e.target.value })}
                         style={smallInputStyle}
-                        placeholder="Muscle group, e.g. Chest · Upper"
-                      />
+                      >
+                        <option value="">— none —</option>
+                        {MUSCLE_TAXONOMY.map((g) => (
+                          <optgroup key={g.group} label={g.group}>
+                            {g.options.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
                       <select
                         value={exEdit.trackingType}
                         onChange={(e) => setExEdit({ ...exEdit, trackingType: e.target.value as TrackingType })}
