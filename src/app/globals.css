@@ -168,6 +168,62 @@ input {
   }
 }
 
+@layer components {
+  /* Direct replacements for shared.tsx's old JS style objects — kept at
+     the same visual sizing/spacing as the originals so migrating a call
+     site is a pure className swap. */
+  .card {
+    @apply bg-card border border-border p-3.5;
+  }
+  .input {
+    @apply w-full bg-background border border-border text-foreground px-2.5 py-2.5 text-sm outline-none;
+  }
+  .input-sm {
+    @apply w-full bg-background border border-border text-foreground px-2 py-1.5 text-[13px] outline-none;
+  }
+  .btn-primary {
+    @apply bg-primary text-primary-foreground border-none px-4 py-2.5 text-sm font-semibold whitespace-nowrap;
+  }
+  .btn-secondary {
+    @apply bg-transparent text-muted-foreground border border-border px-4 py-2.5 text-sm;
+  }
+  .btn-tiny {
+    @apply bg-transparent text-muted-foreground border border-border px-2.5 py-1.5 text-xs;
+  }
+  .section-label {
+    @apply mb-2 text-[13px] text-muted-foreground font-semibold tracking-wide;
+  }
+  .nav-btn {
+    @apply w-9 h-9 bg-card border border-border flex items-center justify-center;
+  }
+
+  /* New consolidations — the audit's biggest repeated shapes. */
+  .centered-loading {
+    @apply min-h-[50vh] flex items-center justify-center text-muted-foreground;
+  }
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/80 flex items-center justify-center p-4;
+  }
+  .list-row {
+    @apply px-2.5 py-2 border-b border-border last:border-b-0;
+  }
+
+  /* Generic colored-badge pattern (MuscleBadge) — a modifier class sets
+     only --badge-color, this base class handles the rest, including the
+     alpha-bordered look via Tailwind's opacity modifier applied through
+     an arbitrary-value border-color. */
+  .badge {
+    @apply text-[10px] px-1.5 py-0.5 whitespace-nowrap bg-transparent;
+    color: var(--badge-color);
+    border: 1px solid color-mix(in srgb, var(--badge-color) 40%, transparent);
+  }
+  .badge-primary { --badge-color: var(--primary); }
+  .badge-info { --badge-color: var(--info); }
+  .badge-info2 { --badge-color: var(--info2); }
+  .badge-success { --badge-color: var(--success); }
+  .badge-muted { --badge-color: var(--muted-foreground); }
+}
+
 .foodbtn:hover {
   border-color: var(--primary) !important;
 }

@@ -47,11 +47,36 @@ export const navBtn = {
   justifyContent: "center",
 } as const;
 
-export function ProgressBar({ value, goal, color }: { value: number; goal: number; color: string }) {
+// Deprecated call sites still pass a raw `color` string — kept working
+// while pages migrate one at a time. New call sites should use `variant`
+// instead, which resolves the fill via a CSS class so callers don't need
+// to import a color constant just to pick one.
+export function ProgressBar({
+  value,
+  goal,
+  color,
+  variant,
+}: {
+  value: number;
+  goal: number;
+  color?: string;
+  variant?: "default" | "good" | "over";
+}) {
   const pct = Math.min(100, (value / goal) * 100);
+  const variantClass = variant === "good" ? "bg-success" : variant === "over" ? "bg-destructive" : variant === "default" ? "bg-primary" : "";
   return (
-    <div style={{ height: 8, background: bg, overflow: "hidden", border: `1px solid ${line}` }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: color, transition: "width 0.3s ease" }} />
+    <div className="h-2 bg-background overflow-hidden border border-border">
+      <div
+        className={`h-full transition-[width] duration-300 ease-out ${variantClass}`}
+        style={{ width: `${pct}%`, ...(color ? { background: color } : {}) }}
+      />
     </div>
   );
+}
+
+// Byte-for-byte-identical loading block that used to be duplicated inline
+// across page.tsx, food/page.tsx, supplements/page.tsx, water/page.tsx,
+// and weight/page.tsx — one shared component instead of five copies.
+export function CenteredLoading() {
+  return <div className="centered-loading">Loading…</div>;
 }
