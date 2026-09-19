@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup } = body ?? {};
+  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
 
   if (!name || !dayType || !["Push", "Pull", "Legs"].includes(dayType)) {
     return NextResponse.json(
@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       variant: variant || "standard",
       block: block || "main",
       muscleGroup: typeof muscleGroup === "string" ? muscleGroup : "",
+      trackingType: ["reps_weight", "duration_distance"].includes(trackingType) ? trackingType : "reps_weight",
     })
     .returning();
 

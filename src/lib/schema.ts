@@ -65,6 +65,10 @@ export const exercises = pgTable("exercises", {
   // for display, independent of the strength/hypertrophy variant.
   block: text("block").notNull().default("main"),
   muscleGroup: text("muscle_group").notNull().default(""),
+  // 'reps_weight' (the default — sets x reps x weight) or 'duration_distance'
+  // (treadmill, rowing, a run — each set logs time and/or distance instead).
+  // Determines which input fields exerciseSetLog rows show for this exercise.
+  trackingType: text("tracking_type").notNull().default("reps_weight"),
   archived: boolean("archived").notNull().default(false),
 });
 
@@ -90,14 +94,34 @@ export const workoutSessions = pgTable("workout_sessions", {
   isManualOverride: boolean("is_manual_override").notNull().default(false),
 });
 
-// One row per exercise performed (or planned) within a session.
+// One row per exercise performed (or planned) within a session. `sets` is
+// the target/default set count used only when first creating the row (to
+// know how many exerciseSetLog rows to pre-create) — actual per-set data
+// (reps/weight, or duration/distance) lives in exerciseSetLog below.
 export const exerciseLog = pgTable("exercise_log", {
   id: serial("id").primaryKey(),
   date: text("date").notNull(),
   exerciseId: integer("exercise_id").notNull(),
   sets: integer("sets"),
+  done: boolean("done").notNull().default(false),
+});
+
+// One row per individual set within a logged exercise, so each set carries
+// its own values instead of one shared reps/weight for the whole exercise
+// (e.g. 8 reps @ 60kg, then 6 reps @ 65kg). weight is `real` (float) — 7.5kg
+// etc. is already representable. For duration_distance exercises (treadmill,
+// a run) reps/weight stay null and durationSeconds/distanceMeters are used
+// instead; which pair applies is read off the parent exercise's
+// trackingType. exerciseLogId isn't a DB foreign key, same convention as
+// exerciseLog.exerciseId.
+export const exerciseSetLog = pgTable("exercise_set_log", {
+  id: serial("id").primaryKey(),
+  exerciseLogId: integer("exercise_log_id").notNull(),
+  setNumber: integer("set_number").notNull(),
   reps: text("reps"),
   weight: real("weight"),
+  durationSeconds: integer("duration_seconds"),
+  distanceMeters: real("distance_meters"),
   done: boolean("done").notNull().default(false),
 });
 

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { exerciseLog } from "@/lib/schema";
+import { exerciseLog, exerciseSetLog } from "@/lib/schema";
 
+// Only toggles the whole-exercise `done` flag now — per-set reps/weight/
+// duration/distance are edited via /api/workout/log/[id]/sets/[setId].
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,19 +16,13 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { sets, reps, weight, done } = body ?? {};
+  const { done } = body ?? {};
 
-  const patch: Partial<typeof exerciseLog.$inferInsert> = {};
-  if (typeof sets === "number") patch.sets = sets;
-  if (typeof reps === "string") patch.reps = reps;
-  if (typeof weight === "number") patch.weight = weight;
-  if (typeof done === "boolean") patch.done = done;
-
-  if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: "no valid fields to update" }, { status: 400 });
+  if (typeof done !== "boolean") {
+    return NextResponse.json({ error: "done (boolean) is required" }, { status: 400 });
   }
 
-  const [row] = await db.update(exerciseLog).set(patch).where(eq(exerciseLog.id, numericId)).returning();
+  const [row] = await db.update(exerciseLog).set({ done }).where(eq(exerciseLog.id, numericId)).returning();
   return NextResponse.json(row);
 }
 
@@ -40,6 +36,8 @@ export async function DELETE(
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
+  // No DB foreign key, so the child set rows need an explicit delete first.
+  await db.delete(exerciseSetLog).where(eq(exerciseSetLog.exerciseLogId, numericId));
   await db.delete(exerciseLog).where(eq(exerciseLog.id, numericId));
   return NextResponse.json({ ok: true });
 }

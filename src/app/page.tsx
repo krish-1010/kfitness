@@ -35,6 +35,7 @@ type WeightEntry = { date: string; weight: number };
 type WaterEntry = { id: number; date: string; amountMl: number; createdAt: string };
 type Food = { id: number; name: string; protein: number; kcal: number; archived: boolean };
 type Supplement = { id: number; name: string; time: string; archived: boolean };
+type TrackingType = "reps_weight" | "duration_distance";
 type Exercise = {
   id: number;
   name: string;
@@ -45,15 +46,23 @@ type Exercise = {
   variant: string;
   block: string;
   muscleGroup: string;
+  trackingType: TrackingType;
   linkCount: number;
   archived: boolean;
+};
+type SetRow = {
+  id: number;
+  setNumber: number;
+  reps: string | null;
+  weight: number | null;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+  done: boolean;
 };
 type ExerciseLogRow = {
   id: number;
   exerciseId: number;
-  sets: number | null;
-  reps: string | null;
-  weight: number | null;
+  targetSets: number | null;
   done: boolean;
   name: string | null;
   defaultSets: number | null;
@@ -61,7 +70,9 @@ type ExerciseLogRow = {
   restSeconds: number | null;
   block: string | null;
   muscleGroup: string | null;
+  trackingType: TrackingType | null;
   linkCount: number;
+  sets: SetRow[];
 };
 type ExerciseLink = { id: number; label: string; url: string };
 type DayType = "Push" | "Pull" | "Legs" | "Rest";
@@ -264,53 +275,6 @@ function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
   );
 }
 
-function Stepper({
-  value,
-  onChange,
-  min = 0,
-  step = 1,
-  placeholder,
-}: {
-  value: number | null;
-  onChange: (v: number) => void;
-  min?: number;
-  step?: number;
-  placeholder?: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", border: `1px solid ${line}`, background: bg }}>
-      <button
-        onClick={() => onChange(Math.max(min, (value ?? min) - step))}
-        style={{ background: "none", border: "none", color: inkDim, width: 22, height: 26, fontSize: 13 }}
-      >
-        −
-      </button>
-      <input
-        value={value ?? ""}
-        placeholder={placeholder}
-        onChange={(e) => {
-          const n = parseInt(e.target.value);
-          onChange(Number.isFinite(n) ? n : min);
-        }}
-        style={{
-          width: 30,
-          textAlign: "center",
-          background: "none",
-          border: "none",
-          color: ink,
-          fontSize: 13,
-          outline: "none",
-        }}
-      />
-      <button
-        onClick={() => onChange((value ?? min) + step)}
-        style={{ background: "none", border: "none", color: inkDim, width: 22, height: 26, fontSize: 13 }}
-      >
-        +
-      </button>
-    </div>
-  );
-}
 const inputStyle = {
   background: bg,
   border: `1px solid ${line}`,
@@ -373,7 +337,14 @@ export default function App() {
   const [showFullProgram, setShowFullProgram] = useState(false);
   const [programPage, setProgramPage] = useState(0);
   const [editingExId, setEditingExId] = useState<number | null>(null);
-  const [exEdit, setExEdit] = useState({ name: "", dayType: "Push", defaultSets: "3", defaultReps: "8-12", muscleGroup: "" });
+  const [exEdit, setExEdit] = useState({
+    name: "",
+    dayType: "Push",
+    defaultSets: "3",
+    defaultReps: "8-12",
+    muscleGroup: "",
+    trackingType: "reps_weight" as TrackingType,
+  });
   const [exerciseQuery, setExerciseQuery] = useState("");
   const [expandedDayTypes, setExpandedDayTypes] = useState<Set<string>>(new Set());
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
@@ -634,24 +605,53 @@ export default function App() {
           restSeconds: ex.restSeconds,
           block: ex.block,
           muscleGroup: ex.muscleGroup,
+          trackingType: ex.trackingType,
           linkCount: ex.linkCount,
         },
       ],
     }));
   };
 
-  const updateLogRow = async (id: number, patch: Partial<ExerciseLogRow>) => {
-    setWorkout((prev) => ({ ...prev, log: prev.log.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
+  // Only ever called with { done } now — per-set fields go through
+  // updateSetRow/addSetRow/removeSetRow below.
+  const updateLogRow = async (id: number, done: boolean) => {
+    setWorkout((prev) => ({ ...prev, log: prev.log.map((r) => (r.id === id ? { ...r, done } : r)) }));
     await fetch(`/api/workout/log/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify({ done }),
     });
   };
 
   const removeLogRow = async (id: number) => {
     setWorkout((prev) => ({ ...prev, log: prev.log.filter((r) => r.id !== id) }));
     await fetch(`/api/workout/log/${id}`, { method: "DELETE" });
+  };
+
+  const updateSetRow = async (logId: number, setId: number, patch: Partial<SetRow>) => {
+    setWorkout((prev) => ({
+      ...prev,
+      log: prev.log.map((r) => (r.id === logId ? { ...r, sets: r.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s)) } : r)),
+    }));
+    await fetch(`/api/workout/log/${logId}/sets/${setId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+  };
+
+  const addSetRow = async (logId: number) => {
+    const res = await fetch(`/api/workout/log/${logId}/sets`, { method: "POST" });
+    const row: SetRow = await res.json();
+    setWorkout((prev) => ({ ...prev, log: prev.log.map((r) => (r.id === logId ? { ...r, sets: [...r.sets, row] } : r)) }));
+  };
+
+  const removeSetRow = async (logId: number, setId: number) => {
+    setWorkout((prev) => ({
+      ...prev,
+      log: prev.log.map((r) => (r.id === logId ? { ...r, sets: r.sets.filter((s) => s.id !== setId) } : r)),
+    }));
+    await fetch(`/api/workout/log/${logId}/sets/${setId}`, { method: "DELETE" });
   };
 
   const addCustomExercise = async () => {
@@ -683,6 +683,7 @@ export default function App() {
       defaultSets: String(ex.defaultSets),
       defaultReps: ex.defaultReps,
       muscleGroup: ex.muscleGroup,
+      trackingType: ex.trackingType,
     });
   };
 
@@ -696,6 +697,7 @@ export default function App() {
         defaultSets: parseInt(exEdit.defaultSets) || 3,
         defaultReps: exEdit.defaultReps,
         muscleGroup: exEdit.muscleGroup,
+        trackingType: exEdit.trackingType,
       }),
     });
     const updated = await res.json();
@@ -877,7 +879,7 @@ export default function App() {
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                         <button
-                          onClick={() => updateLogRow(row.id, { done: !row.done })}
+                          onClick={() => updateLogRow(row.id, !row.done)}
                           style={{
                             width: 18,
                             height: 18,
@@ -912,32 +914,76 @@ export default function App() {
                           ✕
                         </button>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 26 }}>
-                        <Stepper value={row.sets} onChange={(v) => updateLogRow(row.id, { sets: v })} min={1} />
-                        <input
-                          value={row.reps ?? ""}
-                          placeholder={row.defaultReps ?? "reps"}
-                          onChange={(e) => updateLogRow(row.id, { reps: e.target.value })}
-                          style={{ ...smallInputStyle, width: 50, textAlign: "center" }}
-                        />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingLeft: 26 }}>
+                        {row.sets.map((set) =>
+                          row.trackingType === "duration_distance" ? (
+                            <div key={set.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 11, color: inkDim, width: 14 }}>{set.setNumber}</span>
+                              <input
+                                type="number"
+                                step={0.5}
+                                min={0}
+                                value={set.durationSeconds != null ? set.durationSeconds / 60 : ""}
+                                placeholder="min"
+                                onChange={(e) =>
+                                  updateSetRow(row.id, set.id, {
+                                    durationSeconds: e.target.value === "" ? null : Math.round(parseFloat(e.target.value) * 60),
+                                  })
+                                }
+                                style={{ ...smallInputStyle, width: 60, textAlign: "center" }}
+                              />
+                              <input
+                                type="number"
+                                step={0.1}
+                                min={0}
+                                value={set.distanceMeters != null ? set.distanceMeters / 1000 : ""}
+                                placeholder="km"
+                                onChange={(e) =>
+                                  updateSetRow(row.id, set.id, {
+                                    distanceMeters: e.target.value === "" ? null : parseFloat(e.target.value) * 1000,
+                                  })
+                                }
+                                style={{ ...smallInputStyle, width: 60, textAlign: "center" }}
+                              />
+                              <button
+                                onClick={() => removeSetRow(row.id, set.id)}
+                                style={{ background: "none", border: "none", color: inkDim, padding: 2, marginLeft: "auto" }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div key={set.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 11, color: inkDim, width: 14 }}>{set.setNumber}</span>
+                              <input
+                                value={set.reps ?? ""}
+                                placeholder={row.defaultReps ?? "reps"}
+                                onChange={(e) => updateSetRow(row.id, set.id, { reps: e.target.value })}
+                                style={{ ...smallInputStyle, width: 55, textAlign: "center" }}
+                              />
+                              <input
+                                type="number"
+                                step={0.5}
+                                value={set.weight ?? ""}
+                                onChange={(e) => updateSetRow(row.id, set.id, { weight: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                                style={{ ...smallInputStyle, width: 55, textAlign: "center" }}
+                                placeholder="kg"
+                              />
+                              <button
+                                onClick={() => removeSetRow(row.id, set.id)}
+                                style={{ background: "none", border: "none", color: inkDim, padding: 2, marginLeft: "auto" }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )
+                        )}
                         <button
-                          onClick={() => updateLogRow(row.id, { reps: String(Math.max(0, parseInt(row.reps || "0") - 1)) })}
-                          style={{ background: "none", border: `1px solid ${line}`, color: inkDim, width: 22, height: 26, fontSize: 13 }}
+                          onClick={() => addSetRow(row.id)}
+                          style={{ alignSelf: "flex-start", fontSize: 11, color: inkDim, background: "none", border: `1px dashed ${line}`, padding: "2px 8px", marginTop: 2 }}
                         >
-                          −
+                          + set
                         </button>
-                        <button
-                          onClick={() => updateLogRow(row.id, { reps: String((parseInt(row.reps || "0") || 0) + 1) })}
-                          style={{ background: "none", border: `1px solid ${line}`, color: inkDim, width: 22, height: 26, fontSize: 13 }}
-                        >
-                          +
-                        </button>
-                        <input
-                          value={row.weight ?? ""}
-                          onChange={(e) => updateLogRow(row.id, { weight: parseFloat(e.target.value) || 0 })}
-                          style={{ ...smallInputStyle, width: 50, textAlign: "center" }}
-                          placeholder="kg"
-                        />
                       </div>
                     </div>
                   ))}
@@ -1202,6 +1248,14 @@ export default function App() {
                         style={smallInputStyle}
                         placeholder="Muscle group, e.g. Chest · Upper"
                       />
+                      <select
+                        value={exEdit.trackingType}
+                        onChange={(e) => setExEdit({ ...exEdit, trackingType: e.target.value as TrackingType })}
+                        style={smallInputStyle}
+                      >
+                        <option value="reps_weight">Sets × reps × weight</option>
+                        <option value="duration_distance">Duration / distance (cardio)</option>
+                      </select>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => saveEditEx(ex.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                           Save

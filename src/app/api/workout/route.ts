@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { workoutSessions, exerciseLog, exercises } from "@/lib/schema";
 import { resolveDayType, resolveVariant } from "@/lib/rotation";
 import { getLinkCounts } from "@/lib/exerciseLinks";
+import { getSetsByLogId } from "@/lib/exerciseSetLog";
 
 export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date");
@@ -32,9 +33,7 @@ export async function GET(req: NextRequest) {
     .select({
       id: exerciseLog.id,
       exerciseId: exerciseLog.exerciseId,
-      sets: exerciseLog.sets,
-      reps: exerciseLog.reps,
-      weight: exerciseLog.weight,
+      targetSets: exerciseLog.sets,
       done: exerciseLog.done,
       name: exercises.name,
       defaultSets: exercises.defaultSets,
@@ -42,15 +41,21 @@ export async function GET(req: NextRequest) {
       restSeconds: exercises.restSeconds,
       block: exercises.block,
       muscleGroup: exercises.muscleGroup,
+      trackingType: exercises.trackingType,
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))
     .where(eq(exerciseLog.date, date));
 
   const linkCounts = await getLinkCounts(log.map((r) => r.exerciseId));
-  const logWithLinks = log.map((r) => ({ ...r, linkCount: linkCounts[r.exerciseId] ?? 0 }));
+  const setsByLogId = await getSetsByLogId(log.map((r) => r.id));
+  const logWithDetail = log.map((r) => ({
+    ...r,
+    linkCount: linkCounts[r.exerciseId] ?? 0,
+    sets: setsByLogId[r.id] ?? [],
+  }));
 
-  return NextResponse.json({ ...session, variant, log: logWithLinks });
+  return NextResponse.json({ ...session, variant, log: logWithDetail });
 }
 
 // Commits a session row: marks it done/rest/skipped, or overrides the

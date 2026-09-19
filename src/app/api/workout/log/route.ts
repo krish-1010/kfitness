@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { exerciseLog } from "@/lib/schema";
+import { createDefaultSets } from "@/lib/exerciseSetLog";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { date, exerciseId, sets, reps, weight } = body ?? {};
+  const { date, exerciseId, sets } = body ?? {};
 
   if (!date || typeof exerciseId !== "number") {
     return NextResponse.json(
@@ -13,17 +14,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const targetSets = typeof sets === "number" ? sets : null;
+
   const [row] = await db
     .insert(exerciseLog)
     .values({
       date,
       exerciseId,
-      sets: typeof sets === "number" ? sets : null,
-      reps: typeof reps === "string" ? reps : null,
-      weight: typeof weight === "number" ? weight : null,
+      sets: targetSets,
       done: false,
     })
     .returning();
 
-  return NextResponse.json(row, { status: 201 });
+  const setRows = await createDefaultSets(row!.id, targetSets ?? 1);
+
+  return NextResponse.json({ ...row, sets: setRows }, { status: 201 });
 }
