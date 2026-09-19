@@ -349,6 +349,16 @@ export default function App() {
   const [exerciseQuery, setExerciseQuery] = useState("");
   const [expandedPlanDays, setExpandedPlanDays] = useState<Set<number>>(new Set());
   const [showManagePlans, setShowManagePlans] = useState(false);
+  const [plansList, setPlansList] = useState<(Plan & { days: PlanDay[] })[]>([]);
+  const [newPlanName, setNewPlanName] = useState("");
+  const [newPlanDayLabels, setNewPlanDayLabels] = useState<string[]>(["", "", ""]);
+  const [newPlanRestWeekday, setNewPlanRestWeekday] = useState<number | null>(null);
+  const [editingPlanNameId, setEditingPlanNameId] = useState<number | null>(null);
+  const [planNameEdit, setPlanNameEdit] = useState("");
+  const [editingDayId, setEditingDayId] = useState<number | null>(null);
+  const [dayLabelEdit, setDayLabelEdit] = useState("");
+  const [newDayLabelByPlan, setNewDayLabelByPlan] = useState<Record<number, string>>({});
+  const [planActionError, setPlanActionError] = useState<string | null>(null);
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
 
   const [weightInput, setWeightInput] = useState("");
@@ -405,6 +415,11 @@ export default function App() {
     const data: { plan: Plan | null; days: PlanDay[] } = await res.json();
     setActivePlan(data.plan);
     setPlanDaysList(data.days);
+  }, []);
+
+  const loadPlans = useCallback(async () => {
+    const res = await fetch("/api/plans");
+    setPlansList(await res.json());
   }, []);
 
   const loadWater = useCallback(async (d: string) => {
@@ -745,6 +760,131 @@ export default function App() {
   const deleteEx = async (id: number) => {
     setAllExercises((prev) => prev.filter((e) => e.id !== id));
     await fetch(`/api/exercises/${id}`, { method: "DELETE" });
+  };
+
+  // Any plan/day mutation can change what today's view should show (label,
+  // variant alternation, which plan is active), so every handler below
+  // refreshes both the plans list and the live day state — these are cheap
+  // GETs and this modal is a low-frequency admin surface, not the hot path.
+  const refreshAfterPlanChange = async () => {
+    await Promise.all([loadPlans(), loadPlan(), loadWorkout(date)]);
+  };
+
+  const createPlan = async () => {
+    const labels = newPlanDayLabels.map((l) => l.trim()).filter(Boolean);
+    if (!newPlanName.trim() || labels.length === 0) return;
+    await fetch("/api/plans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newPlanName.trim(), dayLabels: labels, fixedRestWeekday: newPlanRestWeekday }),
+    });
+    setNewPlanName("");
+    setNewPlanDayLabels(["", "", ""]);
+    setNewPlanRestWeekday(null);
+    await refreshAfterPlanChange();
+  };
+
+  const activatePlan = async (id: number) => {
+    await fetch(`/api/plans/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: true }),
+    });
+    await refreshAfterPlanChange();
+  };
+
+  const startEditPlanName = (plan: Plan) => {
+    setEditingPlanNameId(plan.id);
+    setPlanNameEdit(plan.name);
+  };
+
+  const savePlanName = async (id: number) => {
+    if (!planNameEdit.trim()) return;
+    await fetch(`/api/plans/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: planNameEdit.trim() }),
+    });
+    setEditingPlanNameId(null);
+    await refreshAfterPlanChange();
+  };
+
+  const setPlanRestWeekday = async (id: number, value: number | null) => {
+    await fetch(`/api/plans/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fixedRestWeekday: value }),
+    });
+    await refreshAfterPlanChange();
+  };
+
+  const archivePlan = async (id: number) => {
+    await fetch(`/api/plans/${id}`, { method: "DELETE" });
+    await refreshAfterPlanChange();
+  };
+
+  const addDayToPlan = async (planId: number) => {
+    const label = (newDayLabelByPlan[planId] || "").trim();
+    if (!label) return;
+    await fetch(`/api/plans/${planId}/days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    });
+    setNewDayLabelByPlan((prev) => ({ ...prev, [planId]: "" }));
+    await refreshAfterPlanChange();
+  };
+
+  const startEditDay = (day: PlanDay) => {
+    setEditingDayId(day.id);
+    setDayLabelEdit(day.label);
+  };
+
+  const saveDayLabel = async (planId: number, dayId: number) => {
+    if (!dayLabelEdit.trim()) return;
+    await fetch(`/api/plans/${planId}/days/${dayId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: dayLabelEdit.trim() }),
+    });
+    setEditingDayId(null);
+    await refreshAfterPlanChange();
+  };
+
+  const setDayVariantMode = async (planId: number, dayId: number, variantMode: VariantMode) => {
+    await fetch(`/api/plans/${planId}/days/${dayId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ variantMode }),
+    });
+    await refreshAfterPlanChange();
+  };
+
+  const moveDay = async (planId: number, dayId: number, direction: -1 | 1) => {
+    const plan = plansList.find((p) => p.id === planId);
+    if (!plan) return;
+    const ids = plan.days.map((d) => d.id);
+    const idx = ids.indexOf(dayId);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= ids.length) return;
+    [ids[idx], ids[newIdx]] = [ids[newIdx]!, ids[idx]!];
+    await fetch(`/api/plans/${planId}/days`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedDayIds: ids }),
+    });
+    await refreshAfterPlanChange();
+  };
+
+  const removeDay = async (planId: number, dayId: number) => {
+    setPlanActionError(null);
+    const res = await fetch(`/api/plans/${planId}/days/${dayId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setPlanActionError(data.error || "Could not delete this day.");
+      return;
+    }
+    await refreshAfterPlanChange();
   };
 
   const shiftDate = (delta: number) => {
@@ -1129,6 +1269,16 @@ export default function App() {
           >
             Full program table
           </button>
+          <button
+            onClick={() => {
+              setShowManagePlans(true);
+              setPlanActionError(null);
+              loadPlans();
+            }}
+            style={{ ...tinyBtn, flex: 1 }}
+          >
+            Manage plans
+          </button>
         </div>
 
         {showFullProgram &&
@@ -1222,6 +1372,202 @@ export default function App() {
               </div>
             );
           })()}
+
+        {showManagePlans && (
+          <div style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 10, overflowY: "auto" }}>
+            <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 12px 20px" }}>
+              <div
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  background: bg,
+                  zIndex: 1,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "14px 0 10px",
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Manage Plans</div>
+                <button onClick={() => setShowManagePlans(false)} style={navBtn}>
+                  ✕
+                </button>
+              </div>
+
+              {planActionError && (
+                <div style={{ background: red + "22", color: red, padding: "8px 10px", fontSize: 12, marginBottom: 12, border: `1px solid ${red}55` }}>
+                  {planActionError}
+                </div>
+              )}
+
+              {plansList.map((plan) => (
+                <div key={plan.id} style={{ ...cardStyle, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+                    {editingPlanNameId === plan.id ? (
+                      <div style={{ display: "flex", gap: 6, flex: 1, minWidth: 160 }}>
+                        <input value={planNameEdit} onChange={(e) => setPlanNameEdit(e.target.value)} style={{ ...smallInputStyle, flex: 1 }} />
+                        <button onClick={() => savePlanName(plan.id)} style={tinyBtn}>
+                          Save
+                        </button>
+                        <button onClick={() => setEditingPlanNameId(null)} style={tinyBtn}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 15, fontWeight: 600 }}>{plan.name}</span>
+                        {plan.isActive && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}>· active</span>}
+                        <button onClick={() => startEditPlanName(plan)} style={tinyBtn}>
+                          Rename
+                        </button>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {!plan.isActive && (
+                        <button onClick={() => activatePlan(plan.id)} style={{ ...tinyBtn, color: amber, borderColor: amber + "55" }}>
+                          Activate
+                        </button>
+                      )}
+                      <button onClick={() => archivePlan(plan.id)} style={tinyBtn}>
+                        Archive
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12, color: inkDim }}>
+                    Fixed rest day:
+                    <select
+                      value={plan.fixedRestWeekday === null ? "" : String(plan.fixedRestWeekday)}
+                      onChange={(e) => setPlanRestWeekday(plan.id, e.target.value === "" ? null : Number(e.target.value))}
+                      style={{ ...smallInputStyle, width: "auto" }}
+                    >
+                      <option value="">None</option>
+                      {WEEKDAY_NAMES.map((wd, i) => (
+                        <option key={wd} value={i}>
+                          {wd}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                    {plan.days.map((day, idx) => (
+                      <div
+                        key={day.id}
+                        style={{ display: "flex", alignItems: "center", gap: 6, background: bg, border: `1px solid ${line}`, padding: "6px 8px", flexWrap: "wrap" }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <button onClick={() => moveDay(plan.id, day.id, -1)} disabled={idx === 0} style={{ ...tinyBtn, padding: "0 6px", fontSize: 10, lineHeight: "14px" }}>
+                            ▲
+                          </button>
+                          <button
+                            onClick={() => moveDay(plan.id, day.id, 1)}
+                            disabled={idx === plan.days.length - 1}
+                            style={{ ...tinyBtn, padding: "0 6px", fontSize: 10, lineHeight: "14px" }}
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        {editingDayId === day.id ? (
+                          <input value={dayLabelEdit} onChange={(e) => setDayLabelEdit(e.target.value)} style={{ ...smallInputStyle, flex: 1, minWidth: 100 }} />
+                        ) : (
+                          <span style={{ fontSize: 13, flex: 1, minWidth: 100 }}>{day.label}</span>
+                        )}
+                        <select
+                          value={day.variantMode}
+                          onChange={(e) => setDayVariantMode(plan.id, day.id, e.target.value as VariantMode)}
+                          style={{ ...smallInputStyle, width: "auto", fontSize: 11 }}
+                        >
+                          <option value="none">No variants</option>
+                          <option value="strength_hypertrophy">Strength/Hypertrophy</option>
+                        </select>
+                        {editingDayId === day.id ? (
+                          <>
+                            <button onClick={() => saveDayLabel(plan.id, day.id)} style={tinyBtn}>
+                              Save
+                            </button>
+                            <button onClick={() => setEditingDayId(null)} style={tinyBtn}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEditDay(day)} style={tinyBtn}>
+                              Rename
+                            </button>
+                            <button onClick={() => removeDay(plan.id, day.id)} style={tinyBtn}>
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      value={newDayLabelByPlan[plan.id] || ""}
+                      onChange={(e) => setNewDayLabelByPlan((prev) => ({ ...prev, [plan.id]: e.target.value }))}
+                      placeholder="New day label, e.g. Upper A"
+                      style={{ ...smallInputStyle, flex: 1 }}
+                    />
+                    <button onClick={() => addDayToPlan(plan.id)} style={tinyBtn}>
+                      + Add day
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div style={cardStyle}>
+                <div style={sectionLabel}>CREATE NEW PLAN</div>
+                <input
+                  value={newPlanName}
+                  onChange={(e) => setNewPlanName(e.target.value)}
+                  placeholder="Plan name, e.g. Upper/Lower"
+                  style={{ ...inputStyle, width: "100%", marginBottom: 8, boxSizing: "border-box" }}
+                />
+                {newPlanDayLabels.map((label, i) => (
+                  <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                    <input
+                      value={label}
+                      onChange={(e) => setNewPlanDayLabels((prev) => prev.map((l, j) => (j === i ? e.target.value : l)))}
+                      placeholder={`Day ${i + 1} label`}
+                      style={{ ...smallInputStyle, flex: 1 }}
+                    />
+                    <button
+                      onClick={() => setNewPlanDayLabels((prev) => prev.filter((_, j) => j !== i))}
+                      disabled={newPlanDayLabels.length <= 1}
+                      style={tinyBtn}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <button onClick={() => setNewPlanDayLabels((prev) => [...prev, ""])} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+                    + Add day
+                  </button>
+                  <select
+                    value={newPlanRestWeekday === null ? "" : String(newPlanRestWeekday)}
+                    onChange={(e) => setNewPlanRestWeekday(e.target.value === "" ? null : Number(e.target.value))}
+                    style={{ ...smallInputStyle, width: "auto" }}
+                  >
+                    <option value="">No fixed rest day</option>
+                    {WEEKDAY_NAMES.map((wd, i) => (
+                      <option key={wd} value={i}>
+                        {wd}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={createPlan} style={{ ...primaryBtn, width: "100%" }}>
+                  Create plan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 20 }}>
           {showManageExercises && (
             <>
