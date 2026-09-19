@@ -137,6 +137,16 @@ export const exercises = pgTable("exercises", {
   // (treadmill, rowing, a run — each set logs time and/or distance instead).
   // Determines which input fields exerciseSetLog rows show for this exercise.
   trackingType: text("tracking_type").notNull().default("reps_weight"),
+  // Lower = do first. Sorts a day's exercise list for fatigue management
+  // (compounds before isolations) — default 100 puts anything unset in the
+  // middle of a typical 1-200 range rather than forcing it first or last.
+  priority: integer("priority").notNull().default(100),
+  // Exercises sharing a non-null group id are interchangeable (e.g. Face
+  // Pulls <-> Reverse Pec Deck Fly) — surfaced as a swap affordance in the
+  // exercise-log UI when a machine is unavailable. No separate groups table;
+  // the group id is just one member exercise's own id, assigned the first
+  // time two exercises are linked (see linkAlternative in page.tsx).
+  alternativeGroupId: integer("alternative_group_id"),
   archived: boolean("archived").notNull().default(false),
 });
 

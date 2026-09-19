@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { exercises, planDays, workoutPlans } from "@/lib/schema";
 import { getLinkCounts } from "@/lib/exerciseLinks";
@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
   const rows = await db
     .select()
     .from(exercises)
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .orderBy(asc(exercises.priority), asc(exercises.id));
 
   const linkCounts = await getLinkCounts(rows.map((r) => r.id));
   return NextResponse.json(rows.map((r) => ({ ...r, linkCount: linkCounts[r.id] ?? 0 })));
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const userId = getCurrentUserId(req);
   const body = await req.json();
-  const { name, planDayId, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
+  const { name, planDayId, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType, priority } = body ?? {};
 
   if (!name || typeof planDayId !== "number") {
     return NextResponse.json(
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
       block: block || "main",
       muscleGroup: typeof muscleGroup === "string" ? muscleGroup : "",
       trackingType: ["reps_weight", "duration_distance"].includes(trackingType) ? trackingType : "reps_weight",
+      priority: typeof priority === "number" ? priority : 100,
     })
     .returning();
 

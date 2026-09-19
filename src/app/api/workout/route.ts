@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { workoutSessions, exerciseLog, exercises, planDays } from "@/lib/schema";
 import { resolveDayType, resolveVariant, type ResolvedDay } from "@/lib/rotation";
@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
       block: exercises.block,
       muscleGroup: exercises.muscleGroup,
       trackingType: exercises.trackingType,
+      alternativeGroupId: exercises.alternativeGroupId,
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))
@@ -57,10 +58,31 @@ export async function GET(req: NextRequest) {
 
   const linkCounts = await getLinkCounts(log.map((r) => r.exerciseId));
   const setsByLogId = await getSetsByLogId(log.map((r) => r.id));
+
+  // Resolve each logged exercise's swap candidates server-side (rather than
+  // relying on the client having exerciseOptions/allExercises loaded) — any
+  // other non-archived exercise of this user's sharing the same
+  // alternativeGroupId is interchangeable with it.
+  const altGroupIds = Array.from(
+    new Set(log.map((r) => r.alternativeGroupId).filter((x): x is number => x != null))
+  );
+  const alternativesByGroup: Record<number, { id: number; name: string }[]> = {};
+  if (altGroupIds.length > 0) {
+    const altRows = await db
+      .select({ id: exercises.id, name: exercises.name, alternativeGroupId: exercises.alternativeGroupId })
+      .from(exercises)
+      .where(and(eq(exercises.userId, userId), eq(exercises.archived, false), inArray(exercises.alternativeGroupId, altGroupIds)));
+    for (const r of altRows) {
+      if (r.alternativeGroupId == null) continue;
+      (alternativesByGroup[r.alternativeGroupId] ??= []).push({ id: r.id, name: r.name });
+    }
+  }
+
   const logWithDetail = log.map((r) => ({
     ...r,
     linkCount: linkCounts[r.exerciseId] ?? 0,
     sets: setsByLogId[r.id] ?? [],
+    alternatives: r.alternativeGroupId != null ? (alternativesByGroup[r.alternativeGroupId] ?? []).filter((a) => a.id !== r.exerciseId) : [],
   }));
 
   return NextResponse.json({ ...session, variant, log: logWithDetail });

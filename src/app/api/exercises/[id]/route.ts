@@ -25,7 +25,7 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, planDayId, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
+  const { name, planDayId, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType, priority, alternativeGroupId } = body ?? {};
 
   if (typeof planDayId === "number" && !(await ownsPlanDay(userId, planDayId))) {
     return NextResponse.json({ error: "invalid planDayId" }, { status: 400 });
@@ -36,11 +36,15 @@ export async function PATCH(
   if (typeof planDayId === "number") patch.planDayId = planDayId;
   if (typeof defaultSets === "number") patch.defaultSets = defaultSets;
   if (typeof defaultReps === "string") patch.defaultReps = defaultReps;
-  if (typeof restSeconds === "number") patch.restSeconds = restSeconds;
+  if (restSeconds === null || typeof restSeconds === "number") patch.restSeconds = restSeconds;
   if (variant && ["strength", "hypertrophy", "standard"].includes(variant)) patch.variant = variant;
   if (block && ["main", "core", "conditioning"].includes(block)) patch.block = block;
   if (typeof muscleGroup === "string") patch.muscleGroup = muscleGroup;
   if (trackingType && ["reps_weight", "duration_distance"].includes(trackingType)) patch.trackingType = trackingType;
+  if (typeof priority === "number") patch.priority = priority;
+  // alternativeGroupId is nullable — null explicitly unlinks, so it needs
+  // its own check rather than folding into a truthy/typeof-number test.
+  if (alternativeGroupId === null || typeof alternativeGroupId === "number") patch.alternativeGroupId = alternativeGroupId;
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "no valid fields to update" }, { status: 400 });

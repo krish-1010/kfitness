@@ -44,6 +44,8 @@ type Exercise = {
   block: string;
   muscleGroup: string;
   trackingType: TrackingType;
+  priority: number;
+  alternativeGroupId: number | null;
   linkCount: number;
   archived: boolean;
 };
@@ -70,6 +72,7 @@ type ExerciseLogRow = {
   trackingType: TrackingType | null;
   linkCount: number;
   sets: SetRow[];
+  alternatives: { id: number; name: string }[];
 };
 type ExerciseLink = { id: number; label: string; url: string };
 type Variant = "strength" | "hypertrophy" | null;
@@ -334,6 +337,10 @@ export default function App() {
   const [customExName, setCustomExName] = useState("");
   const [customExSets, setCustomExSets] = useState("3");
   const [customExReps, setCustomExReps] = useState("8-12");
+  const [customExMuscleGroup, setCustomExMuscleGroup] = useState("");
+  const [customExRestSeconds, setCustomExRestSeconds] = useState("");
+  const [customExPriority, setCustomExPriority] = useState("100");
+  const [customExTrackingType, setCustomExTrackingType] = useState<TrackingType>("reps_weight");
   const [showCustomExercise, setShowCustomExercise] = useState(false);
   const [showManageExercises, setShowManageExercises] = useState(false);
   const [showFullProgram, setShowFullProgram] = useState(false);
@@ -346,6 +353,8 @@ export default function App() {
     defaultReps: "8-12",
     muscleGroup: "",
     trackingType: "reps_weight" as TrackingType,
+    restSeconds: "",
+    priority: "100",
   });
   const [exerciseQuery, setExerciseQuery] = useState("");
   const [expandedPlanDays, setExpandedPlanDays] = useState<Set<number>>(new Set());
@@ -659,9 +668,20 @@ export default function App() {
           muscleGroup: ex.muscleGroup,
           trackingType: ex.trackingType,
           linkCount: ex.linkCount,
+          // Best-effort guess for instant feedback — exerciseOptions is
+          // scoped to the day's active variant, so an alternative tagged
+          // with the *other* variant won't be in it yet. Corrected below.
+          alternatives:
+            ex.alternativeGroupId != null
+              ? exerciseOptions.filter((o) => o.alternativeGroupId === ex.alternativeGroupId && o.id !== ex.id).map((o) => ({ id: o.id, name: o.name }))
+              : [],
         },
       ],
     }));
+    // Reconcile against the server's variant-independent alternatives
+    // resolution (see /api/workout's GET handler) so a swap option tagged
+    // with the day's other variant still shows up without a manual refresh.
+    if (ex.alternativeGroupId != null) await loadWorkout(date);
   };
 
   // Only ever called with { done } now — per-set fields go through
@@ -678,6 +698,20 @@ export default function App() {
   const removeLogRow = async (id: number) => {
     setWorkout((prev) => ({ ...prev, log: prev.log.filter((r) => r.id !== id) }));
     await fetch(`/api/workout/log/${id}`, { method: "DELETE" });
+  };
+
+  // Substitutes a logged exercise for an interchangeable alternative
+  // (equipment unavailable, etc) — existing sets on this log row carry over
+  // untouched, only which exercise it points to changes. Reloads rather
+  // than patching local state since the row's name/muscleGroup/trackingType/
+  // alternatives all need to reflect the new exercise.
+  const swapExercise = async (logId: number, newExerciseId: number) => {
+    await fetch(`/api/workout/log/${logId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exerciseId: newExerciseId }),
+    });
+    await loadWorkout(date);
   };
 
   const updateSetRow = async (logId: number, setId: number, patch: Partial<SetRow>) => {
@@ -716,6 +750,10 @@ export default function App() {
         planDayId: workout.planDayId,
         defaultSets: parseInt(customExSets) || 3,
         defaultReps: customExReps || "8-12",
+        muscleGroup: customExMuscleGroup,
+        restSeconds: customExRestSeconds.trim() === "" ? null : parseInt(customExRestSeconds) || null,
+        priority: parseInt(customExPriority) || 100,
+        trackingType: customExTrackingType,
       }),
     });
     const created: Exercise = await res.json();
@@ -724,7 +762,15 @@ export default function App() {
     setCustomExName("");
     setCustomExSets("3");
     setCustomExReps("8-12");
+    setCustomExMuscleGroup("");
+    setCustomExRestSeconds("");
+    setCustomExPriority("100");
+    setCustomExTrackingType("reps_weight");
     setShowCustomExercise(false);
+    // Full parity with the manage-panel edit form means not needing a
+    // second trip there just to attach a tutorial link right after
+    // creating the exercise.
+    setDetailTarget({ id: created.id, name: created.name, muscleGroup: created.muscleGroup, manage: true });
   };
 
   const startEditEx = (ex: Exercise) => {
@@ -736,6 +782,8 @@ export default function App() {
       defaultReps: ex.defaultReps,
       muscleGroup: ex.muscleGroup,
       trackingType: ex.trackingType,
+      restSeconds: ex.restSeconds == null ? "" : String(ex.restSeconds),
+      priority: String(ex.priority),
     });
   };
 
@@ -750,6 +798,8 @@ export default function App() {
         defaultReps: exEdit.defaultReps,
         muscleGroup: exEdit.muscleGroup,
         trackingType: exEdit.trackingType,
+        restSeconds: exEdit.restSeconds.trim() === "" ? null : parseInt(exEdit.restSeconds) || null,
+        priority: parseInt(exEdit.priority) || 100,
       }),
     });
     const updated = await res.json();
@@ -761,6 +811,36 @@ export default function App() {
   const deleteEx = async (id: number) => {
     setAllExercises((prev) => prev.filter((e) => e.id !== id));
     await fetch(`/api/exercises/${id}`, { method: "DELETE" });
+  };
+
+  // Links two exercises as interchangeable alternatives (e.g. Face Pulls <->
+  // Reverse Pec Deck Fly). No separate groups table — the shared group id is
+  // just whichever of the two already has one, or one exercise's own id if
+  // neither does yet (guaranteed unique since it's a primary key).
+  const linkAlternative = async (exerciseId: number, targetId: number) => {
+    const ex = allExercises.find((e) => e.id === exerciseId);
+    const target = allExercises.find((e) => e.id === targetId);
+    if (!ex || !target) return;
+    const groupId = ex.alternativeGroupId ?? target.alternativeGroupId ?? ex.id;
+    await Promise.all(
+      [exerciseId, targetId].map((id) =>
+        fetch(`/api/exercises/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ alternativeGroupId: groupId }),
+        })
+      )
+    );
+    await loadAllExercises();
+  };
+
+  const unlinkAlternative = async (exerciseId: number) => {
+    await fetch(`/api/exercises/${exerciseId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alternativeGroupId: null }),
+    });
+    await loadAllExercises();
   };
 
   // Any plan/day mutation can change what today's view should show (label,
@@ -1103,6 +1183,23 @@ export default function App() {
                             setDetailTarget({ id: row.exerciseId, name: row.name ?? "", muscleGroup: row.muscleGroup ?? "", manage: false })
                           }
                         />
+                        {row.alternatives.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) swapExercise(row.id, Number(e.target.value));
+                            }}
+                            title="Swap for an alternative exercise"
+                            style={{ ...smallInputStyle, width: "auto", padding: "2px 4px", fontSize: 11 }}
+                          >
+                            <option value="">⇄</option>
+                            {row.alternatives.map((alt) => (
+                              <option key={alt.id} value={alt.id}>
+                                {alt.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <button onClick={() => removeLogRow(row.id)} style={{ background: "none", border: "none", color: inkDim, padding: 2 }}>
                           ✕
                         </button>
@@ -1230,6 +1327,26 @@ export default function App() {
                     <input placeholder="Sets" value={customExSets} onChange={(e) => setCustomExSets(e.target.value)} style={inputStyle} />
                     <input placeholder="Reps (e.g. 8-12)" value={customExReps} onChange={(e) => setCustomExReps(e.target.value)} style={inputStyle} />
                   </div>
+                  <select value={customExMuscleGroup} onChange={(e) => setCustomExMuscleGroup(e.target.value)} style={inputStyle}>
+                    <option value="">— muscle group —</option>
+                    {MUSCLE_TAXONOMY.map((g) => (
+                      <optgroup key={g.group} label={g.group}>
+                        {g.options.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input placeholder="Rest (sec)" value={customExRestSeconds} onChange={(e) => setCustomExRestSeconds(e.target.value)} style={inputStyle} />
+                    <input placeholder="Priority" title="Lower = do first" value={customExPriority} onChange={(e) => setCustomExPriority(e.target.value)} style={inputStyle} />
+                  </div>
+                  <select value={customExTrackingType} onChange={(e) => setCustomExTrackingType(e.target.value as TrackingType)} style={inputStyle}>
+                    <option value="reps_weight">Sets × reps × weight</option>
+                    <option value="duration_distance">Duration / distance (cardio)</option>
+                  </select>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={addCustomExercise} style={{ ...primaryBtn, flex: 1 }}>
                       Add
@@ -1291,7 +1408,8 @@ export default function App() {
               .filter((ex) => !ex.archived && ex.planDayId === planDayId && (v === null || ex.variant === v || ex.variant === "standard"))
               .sort((a, b) => {
                 const order: Record<string, number> = { main: 0, core: 1, conditioning: 2 };
-                return (order[a.block] ?? 0) - (order[b.block] ?? 0);
+                const blockDiff = (order[a.block] ?? 0) - (order[b.block] ?? 0);
+                return blockDiff !== 0 ? blockDiff : a.priority - b.priority;
               });
             return (
               <div style={{ position: "fixed", inset: 0, background: "#000000cc", zIndex: 10, overflowY: "auto" }}>
@@ -1670,6 +1788,48 @@ export default function App() {
                         <option value="duration_distance">Duration / distance (cardio)</option>
                       </select>
                       <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          value={exEdit.restSeconds}
+                          onChange={(e) => setExEdit({ ...exEdit, restSeconds: e.target.value })}
+                          placeholder="Rest (sec)"
+                          style={{ ...smallInputStyle, flex: 1 }}
+                        />
+                        <input
+                          value={exEdit.priority}
+                          onChange={(e) => setExEdit({ ...exEdit, priority: e.target.value })}
+                          placeholder="Priority"
+                          title="Lower = do first"
+                          style={{ ...smallInputStyle, flex: 1 }}
+                        />
+                      </div>
+                      <div style={{ fontSize: 11, color: inkDim }}>
+                        {ex.alternativeGroupId != null ? (
+                          <>
+                            Alternates with: {allExercises.filter((o) => o.alternativeGroupId === ex.alternativeGroupId && o.id !== ex.id).map((o) => o.name).join(", ") || "—"}{" "}
+                            <button onClick={() => unlinkAlternative(ex.id)} style={{ ...tinyBtn, padding: "1px 6px" }}>
+                              Unlink
+                            </button>
+                          </>
+                        ) : (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) linkAlternative(ex.id, Number(e.target.value));
+                            }}
+                            style={smallInputStyle}
+                          >
+                            <option value="">+ Link alternative exercise…</option>
+                            {allExercises
+                              .filter((o) => o.planDayId === ex.planDayId && o.id !== ex.id && !o.archived)
+                              .map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.name}
+                                </option>
+                              ))}
+                          </select>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => saveEditEx(ex.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
                           Save
                         </button>
@@ -1682,6 +1842,7 @@ export default function App() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                         {ex.name} <span style={{ color: inkDim }}>· {planDayById[ex.planDayId]?.label ?? "?"} · {ex.defaultSets}×{ex.defaultReps}</span>
+                        {ex.alternativeGroupId != null && <span style={{ fontSize: 11, color: amber }} title="Has an interchangeable alternative">⇄</span>}
                         <MuscleBadge
                           muscleGroup={ex.muscleGroup}
                           linkCount={ex.linkCount}

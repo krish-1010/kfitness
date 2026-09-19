@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { exerciseLog, exerciseSetLog } from "@/lib/schema";
+import { exerciseLog, exerciseSetLog, exercises } from "@/lib/schema";
 import { getCurrentUserId } from "@/lib/auth";
 
-// Only toggles the whole-exercise `done` flag now — per-set reps/weight/
-// duration/distance are edited via /api/workout/log/[id]/sets/[setId].
+// Toggles the whole-exercise `done` flag, or swaps which exercise this log
+// row points to (the alternative-exercise "⇄" affordance — equipment
+// substitution mid-session). Per-set reps/weight/duration/distance are
+// edited via /api/workout/log/[id]/sets/[setId]; swapping deliberately
+// leaves existing exerciseSetLog rows untouched, so any sets already logged
+// carry over onto the substituted exercise rather than resetting.
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -18,15 +22,25 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { done } = body ?? {};
+  const { done, exerciseId } = body ?? {};
 
-  if (typeof done !== "boolean") {
-    return NextResponse.json({ error: "done (boolean) is required" }, { status: 400 });
+  const patch: Partial<typeof exerciseLog.$inferInsert> = {};
+  if (typeof done === "boolean") patch.done = done;
+  if (typeof exerciseId === "number") {
+    const [owned] = await db.select({ id: exercises.id }).from(exercises).where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)));
+    if (!owned) {
+      return NextResponse.json({ error: "invalid exerciseId" }, { status: 400 });
+    }
+    patch.exerciseId = exerciseId;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "done (boolean) or exerciseId (number) is required" }, { status: 400 });
   }
 
   const [row] = await db
     .update(exerciseLog)
-    .set({ done })
+    .set(patch)
     .where(and(eq(exerciseLog.id, numericId), eq(exerciseLog.userId, userId)))
     .returning();
   return NextResponse.json(row);
