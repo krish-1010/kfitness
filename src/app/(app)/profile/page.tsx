@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTheme, ACCENT_PRESETS } from "../_lib/ThemeContext";
+import { useGoals } from "../_lib/GoalsContext";
 
 type Me = { email: string; displayName: string } | null;
 
@@ -16,12 +17,32 @@ const PLACEHOLDER_ROWS = [
 export default function ProfilePage() {
   const [me, setMe] = useState<Me>(null);
   const { theme, accent, setTheme, setAccent } = useTheme();
+  const { proteinGoal, kcalGoal, setProteinGoal, setKcalGoal } = useGoals();
+  const [proteinInput, setProteinInput] = useState(String(proteinGoal));
+  const [kcalInput, setKcalInput] = useState(String(kcalGoal));
 
   useEffect(() => {
     fetch("/api/me")
       .then((r) => r.json())
       .then(setMe);
   }, []);
+
+  // Keep the free-typed inputs in sync when the loaded/saved goal changes
+  // (e.g. the initial async settings fetch resolving after mount).
+  useEffect(() => setProteinInput(String(proteinGoal)), [proteinGoal]);
+  useEffect(() => setKcalInput(String(kcalGoal)), [kcalGoal]);
+
+  const commitProteinGoal = () => {
+    const n = parseInt(proteinInput);
+    if (Number.isFinite(n) && n > 0) setProteinGoal(n);
+    else setProteinInput(String(proteinGoal));
+  };
+
+  const commitKcalGoal = () => {
+    const n = parseInt(kcalInput);
+    if (Number.isFinite(n) && n > 0) setKcalGoal(n);
+    else setKcalInput(String(kcalGoal));
+  };
 
   const logout = async () => {
     await fetch("/api/logout", { method: "POST" });
@@ -71,6 +92,26 @@ export default function ProfilePage() {
             />
           ))}
         </div>
+      </div>
+
+      <div className="section-label">GOALS</div>
+      <div className="card mb-5">
+        <div className="text-[13px] text-muted-foreground mb-2">Protein target (g)</div>
+        <input
+          type="number"
+          value={proteinInput}
+          onChange={(e) => setProteinInput(e.target.value)}
+          onBlur={commitProteinGoal}
+          className="input mb-4"
+        />
+        <div className="text-[13px] text-muted-foreground mb-2">Daily calories</div>
+        <input
+          type="number"
+          value={kcalInput}
+          onChange={(e) => setKcalInput(e.target.value)}
+          onBlur={commitKcalGoal}
+          className="input"
+        />
       </div>
 
       <div className="section-label">MORE (COMING SOON)</div>
