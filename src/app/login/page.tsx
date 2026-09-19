@@ -29,59 +29,23 @@ function LoginForm() {
     }
   };
 
-  const inputStyle = {
-    background: "#1D1B15",
-    border: "1px solid #2C2A22",
-    color: "#EDEAE3",
-    padding: "10px 12px",
-    fontSize: 14,
-    outline: "none",
-  } as const;
-
   return (
-    <form onSubmit={submit} style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Cut Tracker</div>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
-        autoFocus
-        style={inputStyle}
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
-        style={inputStyle}
-      />
-      {error && <div style={{ color: "#C1604B", fontSize: 13 }}>{error}</div>}
-      <button
-        type="submit"
-        disabled={loading}
-        style={{ background: "#D4922C", border: "none", color: "#15140F", padding: "10px 16px", fontSize: 14, fontWeight: 600 }}
-      >
+    <form onSubmit={submit} className="w-full max-w-[320px] flex flex-col gap-3">
+      <div className="text-xl font-semibold mb-2">Cut Tracker</div>
+      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoFocus className="input" />
+      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="input" />
+      {error && <div className="text-destructive text-[13px]">{error}</div>}
+      <button type="submit" disabled={loading} className="btn-primary">
         {loading ? "..." : "Log in"}
       </button>
-      <div style={{ fontSize: 11, color: "#9A968C" }}>Stays logged in for 30 days.</div>
+      <div className="text-[11px] text-muted-foreground">Stays logged in for 30 days.</div>
     </form>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#15140F",
-        color: "#EDEAE3",
-        padding: 16,
-      }}
-    >
+    <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
       <Suspense fallback={null}>
         <LoginForm />
       </Suspense>
