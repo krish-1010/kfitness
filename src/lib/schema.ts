@@ -144,3 +144,12 @@ export const waterLog = pgTable("water_log", {
   amountMl: integer("amount_ml").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Generic key/value app settings (currently just water_target_ml). Kept
+// deliberately generic — schema, not per-key columns — because a future
+// multi-user pass just adds a userId column here rather than needing a
+// migration per setting.
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
