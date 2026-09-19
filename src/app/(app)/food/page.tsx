@@ -3,37 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 import { useDate } from "../_lib/DateContext";
-import {
-  ink,
-  inkDim,
-  bg2,
-  line,
-  amber,
-  green,
-  red,
-  cardStyle,
-  inputStyle,
-  smallInputStyle,
-  primaryBtn,
-  secondaryBtn,
-  tinyBtn,
-  sectionLabel,
-  navBtn,
-  ProgressBar,
-} from "../_components/shared";
+import { CenteredLoading, ProgressBar } from "../_components/shared";
 
 type LogItem = { id: number; name: string; protein: number; kcal: number };
 type Food = { id: number; name: string; protein: number; kcal: number; archived: boolean };
-
-const foodBtnStyle = {
-  background: bg2,
-  border: `1px solid ${line}`,
-  padding: "10px 12px",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  color: ink,
-} as const;
 
 const FOOD_PAGE_SIZE = 10;
 
@@ -143,13 +116,7 @@ export default function FoodPage() {
     await fetch(`/api/foods/${id}`, { method: "DELETE" });
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
-        Loading…
-      </div>
-    );
-  }
+  if (loading) return <CenteredLoading />;
 
   const filteredFoods = foodQuery.trim() ? foods.filter((f) => f.name.toLowerCase().includes(foodQuery.trim().toLowerCase())) : foods;
   const foodPageCount = Math.max(1, Math.ceil(filteredFoods.length / FOOD_PAGE_SIZE));
@@ -159,27 +126,27 @@ export default function FoodPage() {
   return (
     <div>
       {/* ---- Macros ---- */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <div style={cardStyle}>
-          <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>PROTEIN</div>
-          <div style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="card">
+          <div className="text-[11px] text-muted-foreground mb-1.5">PROTEIN</div>
+          <div className="text-2xl font-bold mb-2">
             {totalProtein.toFixed(0)}
-            <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}> / {PROTEIN_GOAL}g</span>
+            <span className="text-sm text-muted-foreground font-normal"> / {PROTEIN_GOAL}g</span>
           </div>
-          <ProgressBar value={totalProtein} goal={PROTEIN_GOAL} color={totalProtein >= PROTEIN_GOAL ? green : amber} />
+          <ProgressBar value={totalProtein} goal={PROTEIN_GOAL} variant={totalProtein >= PROTEIN_GOAL ? "good" : "default"} />
         </div>
-        <div style={cardStyle}>
-          <div style={{ fontSize: 11, color: inkDim, marginBottom: 6 }}>CALORIES (est.)</div>
-          <div style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
+        <div className="card">
+          <div className="text-[11px] text-muted-foreground mb-1.5">CALORIES (est.)</div>
+          <div className="text-2xl font-bold mb-2">
             {totalKcal.toFixed(0)}
-            <span style={{ fontSize: 14, color: inkDim, fontWeight: 400 }}> / {KCAL_GOAL}</span>
+            <span className="text-sm text-muted-foreground font-normal"> / {KCAL_GOAL}</span>
           </div>
-          <ProgressBar value={totalKcal} goal={KCAL_GOAL} color={totalKcal > KCAL_GOAL ? red : green} />
+          <ProgressBar value={totalKcal} goal={KCAL_GOAL} variant={totalKcal > KCAL_GOAL ? "over" : "good"} />
         </div>
       </div>
 
       {/* ---- Add food ---- */}
-      <div style={sectionLabel}>ADD FOOD</div>
+      <div className="section-label">ADD FOOD</div>
       <input
         value={foodQuery}
         onChange={(e) => {
@@ -187,28 +154,32 @@ export default function FoodPage() {
           setFoodPage(0);
         }}
         placeholder="Search foods…"
-        style={{ ...inputStyle, width: "100%", marginBottom: 8, boxSizing: "border-box" }}
+        className="input mb-2"
       />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 8 }}>
+      <div className="grid grid-cols-2 gap-2 mb-2">
         {pagedFoods.map((f) => (
-          <button key={f.id} className="foodbtn" onClick={() => addFood(f)} style={foodBtnStyle}>
-            <span style={{ fontSize: 13 }}>{f.name}</span>
-            <span style={{ fontSize: 12, color: amber, fontWeight: 600 }}>{f.protein}g</span>
+          <button
+            key={f.id}
+            onClick={() => addFood(f)}
+            className="foodbtn bg-card border border-border py-2.5 px-3 flex justify-between items-center text-foreground"
+          >
+            <span className="text-[13px]">{f.name}</span>
+            <span className="text-xs text-primary font-semibold">{f.protein}g</span>
           </button>
         ))}
         {filteredFoods.length === 0 && (
-          <div style={{ fontSize: 12, color: inkDim, gridColumn: "1 / -1" }}>No foods match &quot;{foodQuery}&quot;</div>
+          <div className="text-xs text-muted-foreground col-span-full">No foods match &quot;{foodQuery}&quot;</div>
         )}
       </div>
       {foodPageCount > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <button onClick={() => setFoodPage((p) => Math.max(0, p - 1))} disabled={clampedFoodPage === 0} style={navBtn}>
+        <div className="flex items-center justify-between mb-2.5">
+          <button onClick={() => setFoodPage((p) => Math.max(0, p - 1))} disabled={clampedFoodPage === 0} className="nav-btn">
             ‹
           </button>
-          <div style={{ fontSize: 11, color: inkDim }}>
+          <div className="text-[11px] text-muted-foreground">
             Page {clampedFoodPage + 1} / {foodPageCount}
           </div>
-          <button onClick={() => setFoodPage((p) => Math.min(foodPageCount - 1, p + 1))} disabled={clampedFoodPage === foodPageCount - 1} style={navBtn}>
+          <button onClick={() => setFoodPage((p) => Math.min(foodPageCount - 1, p + 1))} disabled={clampedFoodPage === foodPageCount - 1} className="nav-btn">
             ›
           </button>
         </div>
@@ -217,74 +188,74 @@ export default function FoodPage() {
       {!showCustomFood ? (
         <button
           onClick={() => setShowCustomFood(true)}
-          style={{ ...foodBtnStyle, width: "100%", justifyContent: "center", gap: 6, marginBottom: 10, borderStyle: "dashed" }}
+          className="foodbtn w-full bg-card border border-dashed border-border py-2.5 px-3 flex justify-center items-center gap-1.5 mb-2.5 text-foreground"
         >
           + Custom item
         </button>
       ) : (
-        <div style={{ ...cardStyle, marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-          <input placeholder="Food name" value={customName} onChange={(e) => setCustomName(e.target.value)} style={inputStyle} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="Protein (g)" type="number" value={customProtein} onChange={(e) => setCustomProtein(e.target.value)} style={inputStyle} />
-            <input placeholder="Kcal (optional)" type="number" value={customKcal} onChange={(e) => setCustomKcal(e.target.value)} style={inputStyle} />
+        <div className="card mb-2.5 flex flex-col gap-2">
+          <input placeholder="Food name" value={customName} onChange={(e) => setCustomName(e.target.value)} className="input" />
+          <div className="flex gap-2">
+            <input placeholder="Protein (g)" type="number" value={customProtein} onChange={(e) => setCustomProtein(e.target.value)} className="input" />
+            <input placeholder="Kcal (optional)" type="number" value={customKcal} onChange={(e) => setCustomKcal(e.target.value)} className="input" />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={addCustomFood} style={{ ...primaryBtn, flex: 1 }}>
+          <div className="flex gap-2">
+            <button onClick={addCustomFood} className="btn-primary flex-1">
               Log once
             </button>
-            <button onClick={addFoodToLibrary} style={{ ...secondaryBtn, flex: 1 }}>
+            <button onClick={addFoodToLibrary} className="btn-secondary flex-1">
               Save to list
             </button>
-            <button onClick={() => setShowCustomFood(false)} style={{ ...secondaryBtn, flex: 1 }}>
+            <button onClick={() => setShowCustomFood(false)} className="btn-secondary flex-1">
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <button onClick={() => setShowManageFoods((v) => !v)} style={{ ...tinyBtn, width: "100%", marginBottom: 20 }}>
+      <button onClick={() => setShowManageFoods((v) => !v)} className="btn-tiny w-full mb-5">
         {showManageFoods ? "Hide" : "Manage"} food list
       </button>
       {showManageFoods && (
-        <div style={{ border: `1px solid ${line}`, marginBottom: 8 }}>
-          {pagedFoods.map((f, idx) => (
-            <div key={f.id} style={{ padding: "8px 10px", borderBottom: idx < pagedFoods.length - 1 ? `1px solid ${line}` : "none" }}>
+        <div className="border border-border mb-2">
+          {pagedFoods.map((f) => (
+            <div key={f.id} className="list-row">
               {editingFoodId === f.id ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <input value={foodEdit.name} onChange={(e) => setFoodEdit({ ...foodEdit, name: e.target.value })} style={smallInputStyle} />
-                  <div style={{ display: "flex", gap: 6 }}>
+                <div className="flex flex-col gap-1.5">
+                  <input value={foodEdit.name} onChange={(e) => setFoodEdit({ ...foodEdit, name: e.target.value })} className="input-sm" />
+                  <div className="flex gap-1.5">
                     <input
                       value={foodEdit.protein}
                       onChange={(e) => setFoodEdit({ ...foodEdit, protein: e.target.value })}
-                      style={{ ...smallInputStyle, width: 70 }}
+                      className="input-sm w-[70px]"
                       placeholder="protein"
                     />
                     <input
                       value={foodEdit.kcal}
                       onChange={(e) => setFoodEdit({ ...foodEdit, kcal: e.target.value })}
-                      style={{ ...smallInputStyle, width: 70 }}
+                      className="input-sm w-[70px]"
                       placeholder="kcal"
                     />
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => saveEditFood(f.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => saveEditFood(f.id)} className="btn-primary flex-1 py-1.5 text-xs">
                       Save
                     </button>
-                    <button onClick={() => setEditingFoodId(null)} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+                    <button onClick={() => setEditingFoodId(null)} className="btn-secondary flex-1 py-1.5 text-xs">
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13 }}>
-                    {f.name} <span style={{ color: inkDim }}>· {f.protein}g · {f.kcal}kcal</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-[13px]">
+                    {f.name} <span className="text-muted-foreground">· {f.protein}g · {f.kcal}kcal</span>
                   </span>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button onClick={() => startEditFood(f)} style={tinyBtn}>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => startEditFood(f)} className="btn-tiny">
                       Edit
                     </button>
-                    <button onClick={() => deleteFood(f.id)} style={tinyBtn}>
+                    <button onClick={() => deleteFood(f.id)} className="btn-tiny">
                       Delete
                     </button>
                   </div>
@@ -296,24 +267,15 @@ export default function FoodPage() {
       )}
 
       {items.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={sectionLabel}>LOGGED</div>
-          <div style={{ border: `1px solid ${line}` }}>
-            {items.map((item, idx) => (
-              <div
-                key={item.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  borderBottom: idx < items.length - 1 ? `1px solid ${line}` : "none",
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{item.name}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 13, color: amber }}>{item.protein}g</span>
-                  <button onClick={() => removeFood(item.id)} style={{ background: "none", border: "none", padding: 4, color: inkDim }}>
+        <div className="mb-5">
+          <div className="section-label">LOGGED</div>
+          <div className="border border-border">
+            {items.map((item) => (
+              <div key={item.id} className="list-row flex justify-between items-center">
+                <span className="text-sm">{item.name}</span>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[13px] text-primary">{item.protein}g</span>
+                  <button onClick={() => removeFood(item.id)} className="bg-transparent border-none p-1 text-muted-foreground">
                     ✕
                   </button>
                 </div>
