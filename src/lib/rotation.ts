@@ -28,12 +28,13 @@ function nextInCycle(type: string): DayType {
  * as an editable suggestion, not a committed fact, until the user acts.
  */
 export async function resolveDayType(
+  userId: number,
   date: string
 ): Promise<{ dayType: DayType; status: string; suggested: boolean }> {
   const [existing] = await db
     .select()
     .from(workoutSessions)
-    .where(eq(workoutSessions.date, date));
+    .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date)));
 
   if (existing) {
     return { dayType: existing.dayType as DayType, status: existing.status, suggested: false };
@@ -44,6 +45,7 @@ export async function resolveDayType(
     .from(workoutSessions)
     .where(
       and(
+        eq(workoutSessions.userId, userId),
         lt(workoutSessions.date, date),
         eq(workoutSessions.status, "done")
       )
@@ -67,12 +69,13 @@ export async function resolveDayType(
  * advance it, so a skipped or rest day never desyncs the strength/
  * hypertrophy alternation either.
  */
-export async function resolveVariant(dayType: string, date: string): Promise<"strength" | "hypertrophy"> {
+export async function resolveVariant(userId: number, dayType: string, date: string): Promise<"strength" | "hypertrophy"> {
   const completed = await db
     .select()
     .from(workoutSessions)
     .where(
       and(
+        eq(workoutSessions.userId, userId),
         eq(workoutSessions.dayType, dayType),
         eq(workoutSessions.status, "done"),
         lt(workoutSessions.date, date)

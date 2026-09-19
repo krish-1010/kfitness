@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, asc } from "drizzle-orm";
+import { and, eq, asc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { waterLog } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const date = req.nextUrl.searchParams.get("date");
   if (!date) {
     return NextResponse.json({ error: "date query param required" }, { status: 400 });
@@ -12,7 +14,7 @@ export async function GET(req: NextRequest) {
   const entries = await db
     .select()
     .from(waterLog)
-    .where(eq(waterLog.date, date))
+    .where(and(eq(waterLog.userId, userId), eq(waterLog.date, date)))
     .orderBy(asc(waterLog.createdAt));
 
   const total = entries.reduce((s, e) => s + e.amountMl, 0);
@@ -20,6 +22,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const body = await req.json();
   const { date, amountMl } = body ?? {};
 
@@ -30,6 +33,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [row] = await db.insert(waterLog).values({ date, amountMl }).returning();
+  const [row] = await db.insert(waterLog).values({ userId, date, amountMl }).returning();
   return NextResponse.json(row, { status: 201 });
 }

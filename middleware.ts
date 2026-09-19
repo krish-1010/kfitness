@@ -22,8 +22,17 @@ export async function middleware(req: NextRequest) {
   }
 
   const cookie = req.cookies.get("ct_session")?.value;
-  const valid = await verifySessionCookie(secret, cookie);
-  if (valid) return NextResponse.next();
+  const userId = await verifySessionCookie(secret, cookie);
+  if (userId !== null) {
+    // Forward the verified userId to route handlers via a header, so they
+    // don't each re-verify the cookie. Building a fresh Headers object from
+    // the incoming request and overwriting this key server-side means a
+    // client can never inject their own x-user-id to spoof another account
+    // — whatever they sent under this name is discarded here.
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-user-id", String(userId));
+    return NextResponse.next({ request: { headers: requestHeaders } });
+  }
 
   const loginUrl = new URL("/login", req.url);
   loginUrl.searchParams.set("next", pathname);

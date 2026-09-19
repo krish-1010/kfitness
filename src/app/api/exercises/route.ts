@@ -3,11 +3,13 @@ import { and, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { exercises } from "@/lib/schema";
 import { getLinkCounts } from "@/lib/exerciseLinks";
+import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const dayType = req.nextUrl.searchParams.get("dayType");
   const variant = req.nextUrl.searchParams.get("variant");
-  const conditions = [eq(exercises.archived, false)];
+  const conditions = [eq(exercises.userId, userId), eq(exercises.archived, false)];
   if (dayType) conditions.push(eq(exercises.dayType, dayType));
   // 'standard' variant exercises (e.g. core) always show alongside whichever
   // strength/hypertrophy variant is active for that day type.
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const body = await req.json();
   const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
 
@@ -40,6 +43,7 @@ export async function POST(req: NextRequest) {
   const [row] = await db
     .insert(exercises)
     .values({
+      userId,
       name,
       dayType,
       defaultSets: typeof defaultSets === "number" ? defaultSets : 3,

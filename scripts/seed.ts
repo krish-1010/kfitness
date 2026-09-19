@@ -64,10 +64,15 @@ const EXERCISES: { name: string; dayType: "Push" | "Pull" | "Legs"; defaultSets:
   { name: "Calf raise", dayType: "Legs", defaultSets: 4, defaultReps: "12-20" },
 ];
 
+// Legacy one-time script for the original account (user id 1) from before
+// multi-user existed. New accounts are onboarded via scripts/create-user.ts,
+// which copies the current live library instead of re-running this.
+const ORIGINAL_USER_ID = 1;
+
 async function seed() {
   const existingFoods = await db.select().from(schema.foods);
   if (existingFoods.length === 0) {
-    await db.insert(schema.foods).values(FOODS);
+    await db.insert(schema.foods).values(FOODS.map((f) => ({ ...f, userId: ORIGINAL_USER_ID })));
     console.log(`Seeded ${FOODS.length} foods`);
   } else {
     console.log(`Skipped foods seed — ${existingFoods.length} rows already exist`);
@@ -75,7 +80,7 @@ async function seed() {
 
   const existingExercises = await db.select().from(schema.exercises);
   if (existingExercises.length === 0) {
-    await db.insert(schema.exercises).values(EXERCISES);
+    await db.insert(schema.exercises).values(EXERCISES.map((e) => ({ ...e, userId: ORIGINAL_USER_ID })));
     console.log(`Seeded ${EXERCISES.length} exercises`);
   } else {
     console.log(`Skipped exercises seed — ${existingExercises.length} rows already exist`);

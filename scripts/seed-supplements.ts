@@ -15,7 +15,13 @@ const SUPPLEMENTS = [
   { name: "HK Vitals Magnesium Glycinate (2 tab)", time: "PM · before bed" },
   { name: "TrueBasics Whey (1 scoop, 30g)", time: "Post-workout" },
   { name: "AS-IT-IS Creatine (5g)", time: "Anytime" },
+  { name: "Omega-3 Fish Oil", time: "With a meal" },
 ];
+
+// Legacy one-time script for the original account. New accounts are
+// onboarded via scripts/create-user.ts, which copies the current live
+// supplement list instead of re-running this.
+const ORIGINAL_USER_ID = 1;
 
 async function seed() {
   const existing = await db.select().from(schema.supplements);
@@ -23,7 +29,7 @@ async function seed() {
     console.log(`Skipped — ${existing.length} supplements already exist. Delete/archive manually first if you want to replace them.`);
     return;
   }
-  await db.insert(schema.supplements).values(SUPPLEMENTS);
+  await db.insert(schema.supplements).values(SUPPLEMENTS.map((s) => ({ ...s, userId: ORIGINAL_USER_ID })));
   console.log(`Seeded ${SUPPLEMENTS.length} supplements`);
 }
 

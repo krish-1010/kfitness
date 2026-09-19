@@ -3,7 +3,7 @@ config({ path: ".env.local" });
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import * as schema from "../src/lib/schema";
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -100,18 +100,30 @@ const PROGRAM: Seed[] = [
   { name: "Hip Abduction Machine", dayType: "Legs", defaultSets: 3, defaultReps: "15", restSeconds: 45, variant: "standard", muscleGroup: "Abductors" },
 ];
 
+// Legacy one-time script for the original account. New accounts are
+// onboarded via scripts/create-user.ts, which copies the current live
+// exercise library instead of re-running this.
+const ORIGINAL_USER_ID = 1;
+
 async function run() {
   // Archive whatever's currently in the library rather than deleting —
   // exercise_log rows reference exerciseId directly, so archiving keeps
   // any already-logged history resolvable.
-  const existing = await db.select().from(schema.exercises).where(eq(schema.exercises.archived, false));
+  const existing = await db
+    .select()
+    .from(schema.exercises)
+    .where(and(eq(schema.exercises.userId, ORIGINAL_USER_ID), eq(schema.exercises.archived, false)));
   if (existing.length > 0) {
-    await db.update(schema.exercises).set({ archived: true }).where(eq(schema.exercises.archived, false));
+    await db
+      .update(schema.exercises)
+      .set({ archived: true })
+      .where(and(eq(schema.exercises.userId, ORIGINAL_USER_ID), eq(schema.exercises.archived, false)));
     console.log(`Archived ${existing.length} existing exercises`);
   }
 
   await db.insert(schema.exercises).values(
     PROGRAM.map((p) => ({
+      userId: ORIGINAL_USER_ID,
       name: p.name,
       dayType: p.dayType,
       defaultSets: p.defaultSets,
@@ -120,7 +132,6 @@ async function run() {
       variant: p.variant,
       block: p.block ?? "main",
       muscleGroup: p.muscleGroup,
-      videoUrl: null,
     }))
   );
   console.log(`Seeded ${PROGRAM.length} exercises (full muscle-coverage PPL x2 program)`);

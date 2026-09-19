@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { logItems } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const body = await req.json();
   const { date, name, protein, kcal } = body ?? {};
 
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest) {
 
   const [row] = await db
     .insert(logItems)
-    .values({ date, name, protein, kcal: typeof kcal === "number" ? kcal : 0 })
+    .values({ userId, date, name, protein, kcal: typeof kcal === "number" ? kcal : 0 })
     .returning();
 
   return NextResponse.json(row, { status: 201 });

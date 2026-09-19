@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { workoutSessions, exerciseLog, exercises } from "@/lib/schema";
 import { resolveDayType, resolveVariant } from "@/lib/rotation";
 import { getLinkCounts } from "@/lib/exerciseLinks";
 import { getSetsByLogId } from "@/lib/exerciseSetLog";
+import { getCurrentUserId } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const date = req.nextUrl.searchParams.get("date");
   if (!date) {
     return NextResponse.json({ error: "date query param required" }, { status: 400 });
@@ -26,8 +28,8 @@ export async function GET(req: NextRequest) {
 
   const session = previewDayType
     ? { dayType: previewDayType, status: "planned", suggested: true }
-    : await resolveDayType(date);
-  const variant = session.dayType === "Rest" ? null : await resolveVariant(session.dayType, date);
+    : await resolveDayType(userId, date);
+  const variant = session.dayType === "Rest" ? null : await resolveVariant(userId, session.dayType, date);
 
   const log = await db
     .select({
@@ -45,7 +47,7 @@ export async function GET(req: NextRequest) {
     })
     .from(exerciseLog)
     .leftJoin(exercises, eq(exerciseLog.exerciseId, exercises.id))
-    .where(eq(exerciseLog.date, date));
+    .where(and(eq(exerciseLog.userId, userId), eq(exerciseLog.date, date)));
 
   const linkCounts = await getLinkCounts(log.map((r) => r.exerciseId));
   const setsByLogId = await getSetsByLogId(log.map((r) => r.id));
@@ -61,6 +63,7 @@ export async function GET(req: NextRequest) {
 // Commits a session row: marks it done/rest/skipped, or overrides the
 // suggested day type (e.g. training Push/Pull/Legs on a suggested Rest day).
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const body = await req.json();
   const { date, dayType, status, isManualOverride } = body ?? {};
 
@@ -77,15 +80,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existing = await db.select().from(workoutSessions).where(eq(workoutSessions.date, date));
+  const existing = await db.select().from(workoutSessions).where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date)));
 
   if (existing.length > 0) {
     await db
       .update(workoutSessions)
       .set({ dayType, status, isManualOverride: !!isManualOverride })
-      .where(eq(workoutSessions.date, date));
+      .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date)));
   } else {
     await db.insert(workoutSessions).values({
+      userId,
       date,
       dayType,
       status,

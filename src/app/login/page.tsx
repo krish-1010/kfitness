@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function LoginForm() {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,34 +18,43 @@ function LoginForm() {
     const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ email, password }),
     });
     setLoading(false);
     if (res.ok) {
       router.push(params.get("next") || "/");
       router.refresh();
     } else {
-      setError("Wrong password");
+      setError("Wrong email or password");
     }
   };
+
+  const inputStyle = {
+    background: "#1D1B15",
+    border: "1px solid #2C2A22",
+    color: "#EDEAE3",
+    padding: "10px 12px",
+    fontSize: 14,
+    outline: "none",
+  } as const;
 
   return (
     <form onSubmit={submit} style={{ width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>Cut Tracker</div>
       <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        autoFocus
+        style={inputStyle}
+      />
+      <input
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         placeholder="Password"
-        autoFocus
-        style={{
-          background: "#1D1B15",
-          border: "1px solid #2C2A22",
-          color: "#EDEAE3",
-          padding: "10px 12px",
-          fontSize: 14,
-          outline: "none",
-        }}
+        style={inputStyle}
       />
       {error && <div style={{ color: "#C1604B", fontSize: 13 }}>{error}</div>}
       <button

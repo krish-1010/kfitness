@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { supplements } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
 
-export async function GET() {
-  const rows = await db.select().from(supplements).where(eq(supplements.archived, false));
+export async function GET(req: NextRequest) {
+  const userId = getCurrentUserId(req);
+  const rows = await db.select().from(supplements).where(and(eq(supplements.userId, userId), eq(supplements.archived, false)));
   return NextResponse.json(rows);
 }
 
 export async function POST(req: NextRequest) {
+  const userId = getCurrentUserId(req);
   const body = await req.json();
   const { name, time } = body ?? {};
 
@@ -18,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const [row] = await db
     .insert(supplements)
-    .values({ name, time: typeof time === "string" ? time : "" })
+    .values({ userId, name, time: typeof time === "string" ? time : "" })
     .returning();
 
   return NextResponse.json(row, { status: 201 });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { exerciseLog, exerciseSetLog } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
 
 // Only toggles the whole-exercise `done` flag now — per-set reps/weight/
 // duration/distance are edited via /api/workout/log/[id]/sets/[setId].
@@ -9,6 +10,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) {
@@ -22,14 +24,19 @@ export async function PATCH(
     return NextResponse.json({ error: "done (boolean) is required" }, { status: 400 });
   }
 
-  const [row] = await db.update(exerciseLog).set({ done }).where(eq(exerciseLog.id, numericId)).returning();
+  const [row] = await db
+    .update(exerciseLog)
+    .set({ done })
+    .where(and(eq(exerciseLog.id, numericId), eq(exerciseLog.userId, userId)))
+    .returning();
   return NextResponse.json(row);
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) {
@@ -38,6 +45,6 @@ export async function DELETE(
 
   // No DB foreign key, so the child set rows need an explicit delete first.
   await db.delete(exerciseSetLog).where(eq(exerciseSetLog.exerciseLogId, numericId));
-  await db.delete(exerciseLog).where(eq(exerciseLog.id, numericId));
+  await db.delete(exerciseLog).where(and(eq(exerciseLog.id, numericId), eq(exerciseLog.userId, userId)));
   return NextResponse.json({ ok: true });
 }

@@ -1,16 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { exerciseSetLog } from "@/lib/schema";
+import { exerciseLog, exerciseSetLog } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
+
+// exerciseSetLog has no userId of its own — ownership is proven by joining
+// to its parent exerciseLog row.
+async function ownsSet(userId: number, setId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: exerciseSetLog.id })
+    .from(exerciseSetLog)
+    .innerJoin(exerciseLog, eq(exerciseSetLog.exerciseLogId, exerciseLog.id))
+    .where(and(eq(exerciseSetLog.id, setId), eq(exerciseLog.userId, userId)));
+  return !!row;
+}
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ setId: string }> }
+  { params }: { params: Promise<{ id: string; setId: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { setId } = await params;
   const numericId = Number(setId);
   if (!Number.isInteger(numericId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  }
+  if (!(await ownsSet(userId, numericId))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
   const body = await req.json();
@@ -32,13 +48,17 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ setId: string }> }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; setId: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { setId } = await params;
   const numericId = Number(setId);
   if (!Number.isInteger(numericId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
+  }
+  if (!(await ownsSet(userId, numericId))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
   await db.delete(exerciseSetLog).where(eq(exerciseSetLog.id, numericId));

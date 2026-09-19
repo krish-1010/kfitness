@@ -1,9 +1,22 @@
 import { pgTable, serial, text, real, boolean, integer, timestamp, unique } from "drizzle-orm/pg-core";
 
+// 2-5 known people, accounts created by running scripts/create-user.ts --
+// no public signup. passwordHash is nullable so a future Google-OAuth-only
+// user (see src/lib/auth.ts) never needs one; adding real OAuth later only
+// touches that one function, not this table or every route.
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash"),
+  displayName: text("display_name").notNull().default(""),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // One row per food item logged on a given date.
 // `date` stays a plain YYYY-MM-DD string to match the original app's date handling exactly.
 export const logItems = pgTable("log_items", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   date: text("date").notNull(),
   name: text("name").notNull(),
   protein: real("protein").notNull(),
@@ -11,46 +24,62 @@ export const logItems = pgTable("log_items", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// One row per (date, supplement) pair, only written when toggled true.
+// One row per (user, date, supplement) triple, only written when toggled true.
 // Absence of a row = not done, matching the original `log.supplements[id]` boolean map.
 // Uses a surrogate id + unique constraint rather than a composite primary
 // key — drizzle-kit push has a known bug (drizzle-team/drizzle-orm #4471)
 // where it repeatedly, incorrectly tries to drop/recreate composite PK
 // constraints and fails against Postgres. A unique constraint gives the
-// same "no duplicate (date, supplement) rows" guarantee without hitting it.
+// same "no duplicate row per user/day/supplement" guarantee without hitting it.
 export const supplementLog = pgTable(
   "supplement_log",
   {
     id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
     date: text("date").notNull(),
     supplementId: text("supplement_id").notNull(),
     done: boolean("done").notNull().default(true),
   },
   (t) => ({
-    dateSupplementUnique: unique().on(t.date, t.supplementId),
+    userDateSupplementUnique: unique().on(t.userId, t.date, t.supplementId),
   })
 );
 
-// User-editable supplement list. supplementLog.supplementId stores this
-// table's id as text (the column's existing type), so no column type change
-// was needed on supplement_log to make this switch from a hardcoded list.
+// User-editable supplement list. Each user gets their own private copy,
+// seeded from the same defaults, on account creation (see
+// scripts/create-user.ts). supplementLog.supplementId stores this table's
+// id as text (the column's existing type), so no column type change was
+// needed on supplement_log to make this switch from a hardcoded list.
 export const supplements = pgTable("supplements", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   name: text("name").notNull(),
   time: text("time").notNull().default(""),
   archived: boolean("archived").notNull().default(false),
 });
 
-// One row per date (matches the original weights array, deduped by date on write).
-export const weights = pgTable("weights", {
-  date: text("date").primaryKey(),
-  weight: real("weight").notNull(),
-});
+// One row per (user, date) — same composite-PK-bug workaround as
+// supplementLog above (surrogate id + unique constraint instead of a
+// natural-key primary key, which is what `date` alone used to be before
+// multiple users each needed their own row for the same date).
+export const weights = pgTable(
+  "weights",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    date: text("date").notNull(),
+    weight: real("weight").notNull(),
+  },
+  (t) => ({
+    userDateUnique: unique().on(t.userId, t.date),
+  })
+);
 
-// User-editable exercise library. Replaces a hardcoded constant so exercises
-// can be added/edited from the UI without a redeploy.
+// User-editable exercise library. Each user gets their own private copy,
+// seeded from the same defaults, on account creation.
 export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   name: text("name").notNull(),
   dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs'
   defaultSets: integer("default_sets").notNull().default(3),
@@ -72,11 +101,11 @@ export const exercises = pgTable("exercises", {
   archived: boolean("archived").notNull().default(false),
 });
 
-// Tutorial/demo links for an exercise. Replaces the single nullable
-// videoUrl column — an exercise can now have several labeled links (e.g.
-// "Form check", "Common mistakes"), not just one. exerciseId isn't a DB
-// foreign key, same convention as exerciseLog, so archiving an exercise
-// never orphans a delete cascade.
+// Tutorial/demo links for an exercise. No userId of its own — ownership is
+// inherited through exerciseId (every route reaches this table only after
+// already confirming the parent exercise belongs to the current user).
+// exerciseId isn't a DB foreign key, same convention as exerciseLog, so
+// archiving an exercise never orphans a delete cascade.
 export const exerciseLinks = pgTable("exercise_links", {
   id: serial("id").primaryKey(),
   exerciseId: integer("exercise_id").notNull(),
@@ -84,15 +113,23 @@ export const exerciseLinks = pgTable("exercise_links", {
   url: text("url").notNull(),
 });
 
-// One row per date once a day type is decided (suggested or overridden) or
-// a session is completed/skipped/rested. Absence of a row for a date means
-// "not decided yet" — the frontend computes a suggestion in that case.
-export const workoutSessions = pgTable("workout_sessions", {
-  date: text("date").primaryKey(),
-  dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs' | 'Rest'
-  status: text("status").notNull().default("planned"), // 'planned' | 'done' | 'skipped' | 'rest'
-  isManualOverride: boolean("is_manual_override").notNull().default(false),
-});
+// One row per (user, date) once a day type is decided (suggested or
+// overridden) or a session is completed/skipped/rested. Absence of a row
+// means "not decided yet" — the frontend computes a suggestion in that case.
+export const workoutSessions = pgTable(
+  "workout_sessions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    date: text("date").notNull(),
+    dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs' | 'Rest'
+    status: text("status").notNull().default("planned"), // 'planned' | 'done' | 'skipped' | 'rest'
+    isManualOverride: boolean("is_manual_override").notNull().default(false),
+  },
+  (t) => ({
+    userDateUnique: unique().on(t.userId, t.date),
+  })
+);
 
 // One row per exercise performed (or planned) within a session. `sets` is
 // the target/default set count used only when first creating the row (to
@@ -100,6 +137,7 @@ export const workoutSessions = pgTable("workout_sessions", {
 // (reps/weight, or duration/distance) lives in exerciseSetLog below.
 export const exerciseLog = pgTable("exercise_log", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   date: text("date").notNull(),
   exerciseId: integer("exercise_id").notNull(),
   sets: integer("sets"),
@@ -112,8 +150,8 @@ export const exerciseLog = pgTable("exercise_log", {
 // etc. is already representable. For duration_distance exercises (treadmill,
 // a run) reps/weight stay null and durationSeconds/distanceMeters are used
 // instead; which pair applies is read off the parent exercise's
-// trackingType. exerciseLogId isn't a DB foreign key, same convention as
-// exerciseLog.exerciseId.
+// trackingType. No userId of its own — inherited through exerciseLogId,
+// same convention as exerciseLinks above.
 export const exerciseSetLog = pgTable("exercise_set_log", {
   id: serial("id").primaryKey(),
   exerciseLogId: integer("exercise_log_id").notNull(),
@@ -125,11 +163,13 @@ export const exerciseSetLog = pgTable("exercise_set_log", {
   done: boolean("done").notNull().default(false),
 });
 
-// User-editable food library. Replaces the hardcoded FOOD_LIBRARY constant.
-// logItems stores name/protein/kcal directly (not a foreign key to this
-// table), so archiving or editing a food never touches past logged days.
+// User-editable food library. Each user gets their own private copy,
+// seeded from the same defaults, on account creation. logItems stores
+// name/protein/kcal directly (not a foreign key to this table), so
+// archiving or editing a food never touches past logged days.
 export const foods = pgTable("foods", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   name: text("name").notNull(),
   protein: real("protein").notNull(),
   kcal: real("kcal").notNull().default(0),
@@ -140,16 +180,23 @@ export const foods = pgTable("foods", {
 // water repeatedly through the day, so this sums rather than overwrites.
 export const waterLog = pgTable("water_log", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
   date: text("date").notNull(),
   amountMl: integer("amount_ml").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// Generic key/value app settings (currently just water_target_ml). Kept
-// deliberately generic — schema, not per-key columns — because a future
-// multi-user pass just adds a userId column here rather than needing a
-// migration per setting.
-export const settings = pgTable("settings", {
-  key: text("key").primaryKey(),
-  value: text("value").notNull(),
-});
+// Generic per-user key/value app settings (currently just water_target_ml).
+// Same composite-PK-bug workaround as weights/workoutSessions above.
+export const settings = pgTable(
+  "settings",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+  },
+  (t) => ({
+    userKeyUnique: unique().on(t.userId, t.key),
+  })
+);

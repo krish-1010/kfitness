@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { foods } from "@/lib/schema";
+import { getCurrentUserId } from "@/lib/auth";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) {
@@ -25,22 +27,27 @@ export async function PATCH(
     return NextResponse.json({ error: "no valid fields to update" }, { status: 400 });
   }
 
-  const [row] = await db.update(foods).set(patch).where(eq(foods.id, numericId)).returning();
+  const [row] = await db
+    .update(foods)
+    .set(patch)
+    .where(and(eq(foods.id, numericId), eq(foods.userId, userId)))
+    .returning();
   return NextResponse.json(row);
 }
 
 // Soft delete — logItems stores name/protein/kcal as a snapshot, not a
 // foreign key, so archiving a food never touches past logged days.
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const userId = getCurrentUserId(req);
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
-  await db.update(foods).set({ archived: true }).where(eq(foods.id, numericId));
+  await db.update(foods).set({ archived: true }).where(and(eq(foods.id, numericId), eq(foods.userId, userId)));
   return NextResponse.json({ ok: true });
 }
