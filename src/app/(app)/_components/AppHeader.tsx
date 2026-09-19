@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDate } from "../_lib/DateContext";
 import { toLocalDateStr, TODAY } from "@/lib/date";
-import { navBtn, inkDim } from "./shared";
 import { DateQuickJumpPopover } from "./DateQuickJumpPopover";
 
 // Rendered once by (app)/layout.tsx, present on every page. Carries the one
@@ -33,27 +32,27 @@ export function AppHeader() {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-      <button onClick={() => router.push("/profile")} aria-label="Profile" style={navBtn}>
+    <div className="flex items-center justify-between mb-5">
+      <button onClick={() => router.push("/profile")} aria-label="Profile" className="nav-btn">
         👤
       </button>
 
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 11, letterSpacing: 0.5, color: inkDim, marginBottom: 2 }}>CUT LOG</div>
-        <div style={{ fontSize: 22, fontWeight: 600 }}>
+      <div className="text-center">
+        <div className="text-[11px] tracking-wide text-muted-foreground mb-0.5">CUT LOG</div>
+        <div className="text-[22px] font-semibold">
           {dateLabel}
           {isToday ? " · Today" : ""}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 6, position: "relative" }}>
-        <button onClick={() => shiftDate(-1)} aria-label="Previous day" style={navBtn}>
+      <div className="flex gap-1.5 relative">
+        <button onClick={() => shiftDate(-1)} aria-label="Previous day" className="nav-btn">
           ‹
         </button>
-        <button onClick={() => setPickerOpen((v) => !v)} aria-label="Jump to date" aria-expanded={pickerOpen} style={navBtn}>
+        <button onClick={() => setPickerOpen((v) => !v)} aria-label="Jump to date" aria-expanded={pickerOpen} className="nav-btn">
           📅
         </button>
-        <button onClick={() => shiftDate(1)} aria-label="Next day" style={navBtn} disabled={isToday}>
+        <button onClick={() => shiftDate(1)} aria-label="Next day" className="nav-btn" disabled={isToday}>
           ›
         </button>
         {pickerOpen && (

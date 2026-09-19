@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getMonthGrid } from "@/lib/calendarGrid";
 import { toLocalDateStr, TODAY } from "@/lib/date";
-import { bg2, line, inkDim, ink, amber, navBtn } from "./shared";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -59,37 +58,27 @@ export function DateQuickJumpPopover({
       ref={popoverRef}
       role="dialog"
       aria-label="Jump to date"
-      style={{
-        position: "absolute",
-        top: "calc(100% + 6px)",
-        right: 0,
-        background: bg2,
-        border: `1px solid ${line}`,
-        padding: 10,
-        width: 240,
-        zIndex: 20,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-      }}
+      className="absolute top-[calc(100%+6px)] right-0 bg-card border border-border p-2.5 w-60 z-20 shadow-xl"
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <button onClick={() => shiftMonth(-1)} aria-label="Previous month" style={{ ...navBtn, width: 28, height: 28 }}>
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => shiftMonth(-1)} aria-label="Previous month" className="nav-btn w-7 h-7">
           ‹
         </button>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>
+        <div className="text-[13px] font-semibold">
           {MONTH_NAMES[viewMonth]} {viewYear}
         </div>
-        <button onClick={() => shiftMonth(1)} aria-label="Next month" style={{ ...navBtn, width: 28, height: 28 }}>
+        <button onClick={() => shiftMonth(1)} aria-label="Next month" className="nav-btn w-7 h-7">
           ›
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
         {WEEKDAY_INITIALS.map((w, i) => (
-          <div key={i} style={{ textAlign: "center", fontSize: 10, color: inkDim }}>
+          <div key={i} className="text-center text-[10px] text-muted-foreground">
             {w}
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+      <div className="grid grid-cols-7 gap-0.5">
         {cells.map((d, i) => {
           if (!d) return <div key={i} />;
           const dStr = toLocalDateStr(d);
@@ -101,14 +90,13 @@ export function DateQuickJumpPopover({
               onClick={() => onPick(dStr)}
               aria-label={dStr}
               aria-current={isSelected ? "date" : undefined}
-              style={{
-                aspectRatio: "1",
-                background: isSelected ? amber : "none",
-                border: isToday && !isSelected ? `1px solid ${amber}` : "1px solid transparent",
-                color: isSelected ? bg2 : ink,
-                fontSize: 12,
-                fontWeight: isSelected ? 700 : 400,
-              }}
+              className={`aspect-square text-xs border ${
+                isSelected
+                  ? "bg-primary text-primary-foreground font-bold border-transparent"
+                  : isToday
+                    ? "bg-transparent text-foreground font-normal border-primary"
+                    : "bg-transparent text-foreground font-normal border-transparent"
+              }`}
             >
               {d.getDate()}
             </button>
