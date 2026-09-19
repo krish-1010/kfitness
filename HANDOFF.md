@@ -1,22 +1,45 @@
 # Cut Tracker — Handoff Document
 
-**Purpose:** carry full context into a new chat session. This app has been built entirely across one long conversation; this doc is the memory that conversation isn't around to provide anymore.
+**Purpose:** carry full context into a new chat session. This app has been built entirely across one very long running conversation with no persistent memory between sessions other than this file, the git history, and the live database — this document is written to be the thing that lets a brand-new chat session pick up exactly where the last one stopped, without having to re-derive anything by reading code from scratch. Read this whole document before making any change. It is intentionally long and repeats context rather than assuming it, because the alternative (a fresh session guessing at intent) has already caused a live production outage once during this project — see the "Phase 3" section below.
 
 ## What this is
 
-A personal workout/nutrition tracker (Push/Pull/Legs split, food/protein/kcal logging, supplements, water, weight) originally built for one person, now being converted into a small multi-user app for 2-5 known people.
+A personal workout/nutrition tracker (originally a hardcoded Push/Pull/Legs split, food/protein/kcal logging, supplements, water, body-weight tracking) originally built for one person, now mid-conversion into a small multi-user app for roughly 2-5 known people, with a further planned conversion from the hardcoded PPL split into a fully custom, user-defined workout-plan builder (arbitrary N-day splits, not just Push/Pull/Legs).
 
 - **Live URL:** https://fitkr.vercel.app
 - **Repo:** https://github.com/krish-1010/kfitness (git remote `origin`, branch `main`)
 - **Local path:** `D:\Downloads\cut-tracker\cut-tracker`
-- **Stack:** Next.js 16 (App Router, Turbopack), Drizzle ORM, Neon Postgres (free tier), Vercel (Hobby plan), deployed via GitHub integration (push to `main` auto-deploys)
+- **Stack:** Next.js 16 (App Router, Turbopack), Drizzle ORM, Neon Postgres (free tier), Vercel (Hobby plan), deployed via GitHub integration (a push to `main` auto-deploys — there is no separate manual deploy step, which matters below because it means the moment Phase 3 work is committed and pushed, it goes live).
 - **Vercel project:** `kfitness`, team `krish1010's projects` (`team_iuSvQvsXGU9g87a3CKMNDuvK`), project id `prj_ZcG47ndYlLafWKwWkXlQDe8s7QVO`
-- **Current login:** email `mkrishna.inbox@gmail.com`, password `krishna` (user id 1 in the `users` table — this is the original account, migrated from the old single-password system)
+- **Current login (original/primary account):** email `mkrishna.inbox@gmail.com`, password `krishna` (user id 1 in the `users` table — this is the original single-user account, migrated onto the multi-user schema during Phase 2; the user's real email in this Claude session is also `mkrishna.inbox@gmail.com`, same person).
+
+## ✅ RESOLVED — Phase 3 outage fixed and deployed (2026-09-19)
+
+**The outage described in the rest of this section (historical, kept for context) is fixed.** `src/app/page.tsx` was finished (all 7 items from the old "NOT yet done" list below, done top to bottom exactly as specified), verified, committed as `7e88e79` ("fix: finish Phase 3 plan-builder rewrite in page.tsx, resolve outage"), and pushed to `main`. Vercel deployment `dpl_8JXFHurVjdVWYfoiwx7RrFeca9Tw` reached `READY`, aliased to `fitkr.vercel.app`, and `get_runtime_errors` shows a clean window since deploy (the only errors in the last hour were 3 pre-fix `NeonDbError: column "day_type" does not exist` occurrences from the *previous* deployment, timestamped before the push).
+
+Verification performed before pushing:
+- `npx tsc --noEmit` → 0 errors (was 23, all in `page.tsx`).
+- `rm -rf .next && npm run build` → clean production build.
+- `next start` on a local port against the **real, already-migrated** Neon DB (not `next dev` — see gotcha #1 below), logged in as the primary account, and manually verified: day-type dropdown switching (Push/Pull/Legs/Rest), the exercise log for the actual day, per-set reps/weight logging (PATCH returned 200 and reflected in the UI), marking a day done (`status` badge changed to "done"), switching to Rest showed the "Confirm rest day" button and hid the log section, the "Full program table" modal paginated through all 6 sections (3 days × strength/hypertrophy) with correct labels and exercise filtering, and the manage-exercise-library panel's collapsible Push/Pull/Legs grouping plus editing an exercise's plan-day assignment (moved an exercise from Push→Pull, confirmed it moved, moved it back).
+- All test data written during smoke-testing (a logged set's reps/weight, a session's `status`, an exercise's `planDayId`) was reverted back to its original value afterward via API calls, since this was tested directly against the live production DB.
+- Post-push: hit `https://fitkr.vercel.app/api/workout?date=...` directly with a real session cookie → 200 OK with correct JSON (was an empty 500 before).
+
+**What's next:** the "Manage Plans UI" (letting a user actually create/switch/edit plans through the UI, rather than everyone being stuck on the one auto-created "PPL" plan) is still entirely unbuilt — see "Phase 3 sub-items not yet started" below. Ask the user whether to pick that up next, or move to something else; don't assume.
+
+---
+
+## Historical: the outage as it was when this handoff was originally written — kept for context, not current
+
+**As of the moment this handoff was written, the live production site at https://fitkr.vercel.app is broken and returning HTTP 500 on `/api/workout`.** This is a self-inflicted, currently-unresolved outage caused by doing the database schema migration for Phase 3 (the plan-builder rewrite) directly against the **live** Neon database before the corresponding frontend/backend code was finished, committed, and deployed. Nothing has been pushed to `main` yet for Phase 3 — the live Vercel deployment is still running the old Phase-2 code, which expects the now-removed `day_type` columns on `exercises` and `workout_sessions`, and those columns no longer exist in the live DB. This was confirmed directly via `curl` against `https://fitkr.vercel.app/api/workout?date=...` with a valid session cookie, returning an empty HTTP 500 body.
+
+**The fix is entirely local and already mostly written: finish rewriting `src/app/page.tsx` (see the detailed section below), typecheck, build, smoke-test, commit, and push.** The moment that push lands, the live site should be repaired, because the backend API routes and DB schema are already fully consistent with each other — it is only the frontend that still speaks the old shape. Until that push happens, **do not run any other schema-affecting scripts against the live DB**, and be aware the live site is not usable by the real user (or any other registered user) in its current state.
+
+There is currently nothing staged or committed for this work — `git status` shows the same uncommitted working-tree changes described below, and no Phase-3 commit exists yet on top of `f6d64f1` (the last commit, "docs: add handoff document for context continuity"). *(Historical note: this is no longer true — see "RESOLVED" above.)*
 
 ## Available tooling worth knowing about
 
-- **Vercel MCP tools** (`mcp__5fb6986b-...__*`) are connected — use `list_deployments`, `get_deployment`, `get_runtime_errors` to check deployment status and errors directly rather than asking the user. Don't need to guess deployment state.
-- **Neon DB access**: no special MCP tool needed — just run throwaway Node scripts using `DATABASE_URL` from `.env.local` (via `@neondatabase/serverless`'s `neon()` tagged-template function). This is how every migration in this project has been run. Pattern:
+- **Vercel MCP tools** (`mcp__5fb6986b-...__*`) are connected — use `list_deployments`, `get_deployment`, `get_runtime_errors` to check deployment status and errors directly rather than asking the user or guessing. After the Phase 3 push lands, checking `get_runtime_errors` for a clean window is the way to confirm the outage is actually resolved, not just "should be."
+- **Neon DB access**: no special MCP tool needed — just run throwaway Node scripts using `DATABASE_URL` from `.env.local` (via `@neondatabase/serverless`'s `neon()` tagged-template function). This is how every migration in this project has been run, including the Phase 3 one already applied to the live DB. Pattern:
   ```js
   import { config } from "dotenv";
   config({ path: ".env.local" });
@@ -27,7 +50,7 @@ A personal workout/nutrition tracker (Push/Pull/Legs split, food/protein/kcal lo
   Write to `scripts/_tmp-*.mjs`, run with `node`, then delete — never commit these.
 - **Neon skills** are installed at `.claude/skills/neon` and `.claude/skills/neon-postgres` (from `npx neon@latest skills`) — mostly just guidance docs, not required for the DB-access pattern above.
 - **gh CLI** is installed and authenticated as `krish-1010`.
-- Browser preview tools (`preview_start`, `computer`, etc.) work for local smoke-testing.
+- Browser preview tools (`preview_start`, `computer`, `read_page`, etc., all under the `mcp__Claude_Browser__*` namespace in this environment) work for local smoke-testing against `next start` or `next dev`.
 
 ## Critical gotchas — read before touching auth or the DB
 
@@ -35,72 +58,348 @@ A personal workout/nutrition tracker (Push/Pull/Legs split, food/protein/kcal lo
 
 2. **`drizzle-kit push` is unreliable on this project** — it has hit multiple confirmed bugs (drizzle-team/drizzle-orm #4471 and others) around composite primary keys, corrupting migrations repeatedly early in this project's history. **Never use `npm run db:push`.** All schema changes are applied via raw SQL run directly against Neon using the pattern above, then `src/lib/schema.ts` is updated to match by hand. Tables that need a "natural key" uniqueness (e.g., one row per user per date) use a surrogate `serial id` primary key + a `unique()` constraint instead of a composite primary key, specifically to avoid this bug (see `weights`, `workoutSessions`, `settings`, `supplementLog` in schema.ts).
 
-3. **Verification loop for every change** (established throughout, don't skip steps):
+3. **Verification loop for every change** (established throughout, don't skip steps — this is the standard the user expects and has asked for explicitly and repeatedly):
    - `npx tsc --noEmit` (typecheck)
    - `rm -rf .next && npm run build` (full build)
-   - For UI changes: `preview_start` + browser tools, smoke-test the actual feature
+   - For UI changes: `preview_start` + browser tools, smoke-test the actual feature by hand (click through it, don't just eyeball the code)
    - For auth/middleware changes: `next start` locally + `curl` to verify unauthenticated vs authenticated behavior against the real DB
-   - `git add -A -- ':!.env.local' ':!.next'` (never commit `.env.local`), commit, push
+   - `git add` specific files (never `-A`/`.` blindly — check `git status` first; never commit `.env.local` or `.next`), commit, push
    - Check Vercel deployment reaches `READY` via `get_deployment`, then `get_runtime_errors` for a clean window, before considering it done
+   - **Extra rule learned from the current outage**: never run a schema migration against the live Neon DB until the matching code change is fully written and ready to deploy in the same sitting. If a migration and its code can't land together, don't run the migration yet.
 
 4. **`react-muscle-highlighter`** (npm package) powers the muscle diagrams. It has no sub-muscle-head distinction (triceps lateral vs long head both light up the same "triceps" region) and no dedicated abductors region (mapped to "gluteal" as closest fit). Mapping logic is in `src/lib/muscleSlug.ts`.
 
 ## Architecture map
 
-- `src/lib/schema.ts` — every Drizzle table. Read this first when touching data.
+- `src/lib/schema.ts` — every Drizzle table. Read this first when touching data. **Already updated for Phase 3** (see below) — this matches what's actually live in the Neon DB right now.
 - `src/lib/auth.ts` — `authenticateUser(email, password)` (the one choke point for login checks — swapping in Google OAuth later only touches this function) and `getCurrentUserId(req)` (reads the `x-user-id` header middleware sets).
 - `src/lib/session.ts` — signs/verifies the session cookie. Format: `${userId}.${expiresAtMs}.${hexHmacSig}`.
-- `middleware.ts` — auth gate. Public paths (no auth required): `/login`, `/api/login`, `/manifest.webmanifest`, `/icon`, `/apple-icon`, `/sw.js` (PWA assets must stay public — browsers fetch them unauthenticated to decide whether to offer the install prompt). Everything else requires a valid `ct_session` cookie; on success, forwards the verified `userId` to route handlers via an `x-user-id` header (rebuilt server-side every request, so a client can never spoof it).
-- `src/lib/rotation.ts` — the Push/Pull/Legs day-type and strength/hypertrophy variant resolution algorithm. Currently hardcoded to a 3-day PPL cycle — **this needs generalizing in Phase 3** to support arbitrary N-day user-defined plans.
-- `src/lib/exerciseLinks.ts`, `src/lib/exerciseSetLog.ts` — batched helper queries (avoid N+1) for tutorial links and per-set data.
-- `src/app/page.tsx` — the entire frontend UI in one large client component (~1600+ lines). Every feature's UI lives here: day log, exercise quick-add, muscle diagram, tutorial modal, food/exercise/supplement management panels, weight/water logging.
-- `src/app/login/page.tsx` — login form (email + password).
-- `scripts/create-user.ts` — **the real way to onboard a new person.** Usage: `npx tsx scripts/create-user.ts <email> <password> [displayName] [templateUserId]`. Creates the user, then copies the *current live* active foods/supplements/exercises from a template user (default: user 1) into the new account — so new users start with whatever's actually live today, not a hardcoded snapshot.
-- `scripts/seed.ts`, `scripts/seed-ppl-program.ts`, `scripts/seed-supplements.ts` — legacy one-time scripts hardcoded to `userId = 1` (the original account). Not meant to run again; kept for history. Don't use these for onboarding new users — use `create-user.ts`.
+- `middleware.ts` — auth gate. Public paths (no auth required): `/login`, `/api/login`, `/manifest.webmanifest`, `/icon`, `/apple-icon`, `/sw.js` (PWA assets must stay public — browsers fetch them unauthenticated to decide whether to offer the install prompt). Everything else requires a valid `ct_session` cookie; on success, forwards the verified `userId` to route handlers via an `x-user-id` header (rebuilt server-side every request, so a client can never spoof it). Not touched during Phase 3.
+- `src/lib/rotation.ts` — **rewritten for Phase 3.** Used to be hardcoded to a fixed 3-day `[Push, Pull, Legs]` cycle; now generalized to resolve an arbitrary-length, user-defined plan. See the detailed Phase 3 section below for its exact current shape.
+- `src/lib/exerciseLinks.ts`, `src/lib/exerciseSetLog.ts` — batched helper queries (avoid N+1) for tutorial links and per-set data. Not touched during Phase 3.
+- `src/app/page.tsx` — the entire frontend UI in one large client component (~1600+ lines). Every feature's UI lives here: day log, exercise quick-add, muscle diagram, tutorial modal, food/exercise/supplement management panels, weight/water logging. **This file is currently mid-rewrite and does not currently typecheck or build — see the detailed Phase 3 section below for exactly what's done and what remains, with line numbers.**
+- `src/app/login/page.tsx` — login form (email + password). Not touched during Phase 3.
+- `src/app/api/workout/route.ts`, `src/app/api/exercises/route.ts`, `src/app/api/exercises/[id]/route.ts` — **rewritten for Phase 3**, see below.
+- `src/app/api/plan/route.ts` (new), `src/app/api/plans/route.ts` (new), `src/app/api/plans/[id]/route.ts` (new), `src/app/api/plans/[id]/days/route.ts` (new), `src/app/api/plans/[id]/days/[dayId]/route.ts` (new) — the entire new plan-management backend for Phase 3, see below.
+- `scripts/create-user.ts` — **the real way to onboard a new person**, updated for Phase 3. Usage: `npx tsx scripts/create-user.ts <email> <password> [displayName] [templateUserId]`. Creates the user, copies the template user's active plan structure (plan + plan_days) first, builds an old-plan-day-id → new-plan-day-id remapping table, then copies the template user's current live active foods/supplements/exercises into the new account — remapping each copied exercise's `planDayId` through that table. So new users start with whatever's actually live today (both the exercise library and the plan shape it belongs to), not a hardcoded snapshot.
+- `scripts/seed.ts`, `scripts/seed-ppl-program.ts` — **deleted** during Phase 3 (see below). `scripts/seed-supplements.ts` still exists and is unaffected.
 
-## What's done (Phases 1 & 2 of the roadmap)
+## What's done (Phases 1 & 2 of the roadmap) — stable, deployed, working in production before Phase 3 broke it
 
-Full plan file lives at `C:\Users\krish\.claude\plans\1-i-should-be-foamy-engelbart.md` (Phases 3-5 are detailed there too, at outline level).
+Full plan file lives at `C:\Users\krish\.claude\plans\1-i-should-be-foamy-engelbart.md` (Phases 3-5 are detailed there too, at outline level, though Phase 3 has since evolved beyond what that file describes — trust this handoff over that file for Phase 3 specifics).
 
 **Phase 1 — quick wins:**
-- Per-set reps/weight logging (`exercise_set_log` table) — each set independently editable, not one shared reps/weight per exercise.
-- `exercises.trackingType` (`'reps_weight' | 'duration_distance'`) — cardio-style exercises log duration/distance per set instead.
-- PWA install support (manifest, generated icons via `next/og`, minimal no-op-caching service worker).
+- Per-set reps/weight logging (`exercise_set_log` table) — each set independently editable, not one shared reps/weight per exercise. Supports float weights (e.g. 7.5 kg) per the user's explicit request.
+- `exercises.trackingType` (`'reps_weight' | 'duration_distance'`) — cardio-style exercises (e.g. treadmill) log duration/distance per set instead of reps/weight, also per explicit user request.
+- PWA install support (manifest, generated icons via `next/og`, minimal no-op-caching service worker) — requested to be built in Phase 1 itself rather than deferred.
 - Water intake target with a progress bar (generic `settings` key/value table).
 
-**Phase 2 — multi-user foundation (just completed):**
-- `users` table (email, nullable `passwordHash` for future OAuth-only accounts, displayName).
-- Every user-owned table got a `userId` column: `foods`, `supplements`, `supplement_log`, `exercises`, `workout_sessions`, `exercise_log`, `log_items`, `weights`, `water_log`, `settings`. (`exercise_links` and `exercise_set_log` inherit ownership via their parent row instead — checked explicitly in the routes that touch them.)
+**Phase 2 — multi-user foundation:**
+- `users` table (email, nullable `passwordHash` for future OAuth-only accounts — the user explicitly asked for the auth system to be built with future Google OAuth migration in mind even though only simple per-user passwords are needed for now), displayName.
+- Every user-owned table got a `userId` column: `foods`, `supplements`, `supplement_log`, `exercises`, `workout_sessions`, `exercise_log`, `log_items`, `weights`, `water_log`, `settings`. (`exercise_links` and `exercise_set_log` inherit ownership via their parent row instead — checked explicitly in the routes that touch them, same pattern continued into Phase 3's `plan_days`.)
 - bcrypt password hashing, per-user login, session cookie now carries `userId`.
-- **Every single API route** was updated to filter by the current user's `userId` — verified this doesn't leak cross-user by actually creating a second test account and confirming a cross-user mutation attempt silently no-ops rather than touching the other account's data.
+- **Every single API route** was updated to filter by the current user's `userId` — verified this doesn't leak cross-user by actually creating a second test account and confirming a cross-user mutation attempt silently no-ops rather than touching the other account's data. That test account was cleaned up afterward.
 - Original account's full history migrated onto a real user row (verified end-to-end before deploying: login, existing logged workout data, food list, all intact and correctly scoped).
+- **Important residual note:** because the login mechanism's cookie format changed during Phase 2, anyone with an old session got bounced to `/login` once and needed to log back in. This already happened for the primary account and is resolved/expected, not a bug to chase.
 
-**Important:** because the login mechanism's cookie format changed, anyone with an old session gets bounced to `/login` once and needs to log back in. This already happened for the primary account.
+## Phase 3 — Custom plan builder (IN PROGRESS, NOT YET DEPLOYED, CURRENTLY CAUSING THE OUTAGE ABOVE)
 
-## What's NOT done yet (remaining roadmap)
+This is the largest remaining phase and the one actively being worked on. The core idea, in the user's own words: "each user will be having different types of workout plan, so a user should be able to create their own plan, like 5-day, 6-day etc.. create their own exercise, can able to add - each, specific, accurate muscle... default placeholder sets and reps for placeholders, reference links... should be there... also a priority - inputted." The hardcoded 3-day Push/Pull/Legs cycle is being replaced by a fully generic, user-authored N-day plan model. The most recent direct instruction that started this phase was simply: **"continue on next phases."**
 
-**Phase 3 — Custom plan builder** (largest remaining phase, not started):
-- `workout_plans` + `plan_days` tables to replace the hardcoded `CYCLE = [Push, Pull, Legs]` in `rotation.ts` — support arbitrary N-day user-defined splits with custom labels, not just PPL.
-- `exercises.dayType` (fixed enum) → `exercises.planDayId` (points at a plan_days row).
-- A proper researched canonical muscle taxonomy (draft list is in the plan file) to replace free-text `muscleGroup` strings — needs real research per the user's explicit ask ("look for proper muscle names, build the list even more").
-- **Exercise alternatives** — user explicitly asked for this (e.g., Face Pulls ↔ Reverse Pec Deck Fly as interchangeable when a machine's unavailable). Planned as `exercises.alternativeGroupId` (nullable int, shared group = interchangeable) + a "⇄ swap" UI affordance.
-- `exercises.priority` (int, lower = do first) for ordering a day's exercise list by fatigue-management logic (compounds before isolations).
-- Custom-exercise creation form needs full parity with the manage-panel edit form (currently only asks name/sets/reps) — add muscle picker, rest, priority, tutorial links inline.
-- `PROGRAM_SECTIONS` (hardcoded 6-tuple in `page.tsx` driving the "Full Program table" modal) needs to derive from the user's actual plan days instead.
+### Database migration status: ALREADY APPLIED TO THE LIVE NEON DATABASE
+
+This is the most important fact in this whole document. The schema below is not a proposal — it is what the live production database actually looks like right now. There is no going back to the old schema without another migration; the path forward is to finish and ship the matching code.
+
+New tables added:
+```ts
+export const workoutPlans = pgTable("workout_plans", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(false),
+  fixedRestWeekday: integer("fixed_rest_weekday"), // 0=Sunday..6=Saturday, or null if no fixed rest day
+  archived: boolean("archived").notNull().default(false),
+});
+
+export const planDays = pgTable(
+  "plan_days",
+  {
+    id: serial("id").primaryKey(),
+    planId: integer("plan_id").notNull(),
+    dayIndex: integer("day_index").notNull(), // 0-based position in the cycle
+    label: text("label").notNull(), // free-text, e.g. "Push", "Upper A", "Legs + Core"
+    variantMode: text("variant_mode").notNull().default("none"), // 'none' | 'strength_hypertrophy'
+  },
+  (t) => ({ planDayIndexUnique: unique().on(t.planId, t.dayIndex) })
+);
+```
+Existing tables altered:
+- `exercises`: the old `dayType` text column (was `'Push'|'Pull'|'Legs'`) was **dropped**. In its place: `planDayId: integer("plan_day_id").notNull()`, a foreign reference (not declared as a DB-level FK, consistent with how the rest of this schema does ownership — enforced in application code instead) to a row in `plan_days`. All other columns unchanged: `defaultSets`, `defaultReps`, `restSeconds`, `variant` ('strength'|'hypertrophy'|'standard' — now scoped to whatever the owning plan_day's `variantMode` says, rather than being globally meaningful), `block`, `muscleGroup`, `trackingType`, `archived`.
+- `workoutSessions`: the old `dayType` text column was **dropped**. In its place: `planDayId: integer("plan_day_id")` — nullable, where `null` now means "Rest" (previously Rest was just another string value of `dayType`). Still has `userId`, `date`, `status`, `isManualOverride`, and the `unique(userId, date)` constraint from Phase 2.
+
+The actual migration was run as a throwaway script (already deleted per the project's convention of never committing `scripts/_tmp-*.mjs` files) that: created a `workout_plans` row per existing user with `name: "PPL"` and `isActive: true`; created three `plan_days` rows per plan (`dayIndex` 0/1/2, `label` "Push"/"Pull"/"Legs", `variantMode: "strength_hypertrophy"`); added the new nullable `plan_day_id` columns to `exercises` and `workout_sessions` via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`; backfilled every existing row by matching its old `dayType` string to the correct new `plan_days.id`; then dropped the old `day_type` columns entirely. This ran successfully on the **second** attempt — the first attempt failed partway through with `NeonDbError: column "plan_day_id" of relation "exercises" does not exist` because the `ALTER TABLE ADD COLUMN` step was accidentally omitted before the `UPDATE` loop; the partially-created `workout_plans`/`plan_days` rows from that failed attempt were cleaned up manually before rerunning the corrected script. The rerun was verified via console output: 49 exercises correctly remapped across Push/Pull/Legs, and the 5 most recent `workout_sessions` rows correctly remapped, before the old columns were dropped.
+
+### Backend/API status: FULLY REWRITTEN AND TYPECHECKS CLEAN
+
+Verified directly (just re-ran `npx tsc --noEmit` while writing this handoff): **every single one of the current TypeScript errors in the project is confined to `src/app/page.tsx`** — 23 errors, all in that one file, listed exactly in the "Frontend status" section below. No other file has any type error. This confirms the backend really is done and internally consistent with the live DB schema.
+
+- **`src/lib/rotation.ts`** — completely rewritten. Exports:
+  - `getActivePlan(userId)` → looks up the user's one `workoutPlans` row where `isActive=true, archived=false`, then its `planDays` ordered by `dayIndex`; returns `{ planId, fixedRestWeekday, days } | null`.
+  - `resolveDayType(userId, date)` → returns `{ planDayId: number | null, label, variantMode, status, suggested }` for a given date. Logic: if a `workout_sessions` row already exists for that exact date, its `planDayId`/`status` wins outright (nothing is "suggested" — it's a real recorded fact). Otherwise, if the plan has a `fixedRestWeekday` matching that date's weekday, suggest Rest (`planDayId: null`). Otherwise, find the most recent prior date with a **completed** session (skip/rest days are deliberately not counted, so a missed day never desyncs the cycle — this "skip-tolerant" behavior was a deliberate fix from an earlier phase and Phase 3 preserves it), and suggest the next `plan_days` entry after that one in `dayIndex` order (wrapping around); if there is no prior completed session at all, suggest `days[0]`.
+  - `resolveVariant(userId, planDayId, date)` → returns `'strength' | 'hypertrophy' | null`. Looks up the `plan_days` row for `planDayId`; if its `variantMode !== 'strength_hypertrophy'`, returns `null` (meaning: this day type has no strength/hypertrophy alternation, exercises of `variant: 'standard'` are just shown as-is). Otherwise counts how many **completed** sessions of that same `planDayId` occurred strictly before `date`, and alternates by parity (even count so far → strength, odd → hypertrophy) — same alternation rule as before Phase 3, just generalized off `planDayId` instead of a fixed `dayType` string.
+
+- **`src/app/api/workout/route.ts`** — rewritten. `GET` now accepts a `previewPlanDayId` query param, which is either a numeric plan-day id (as a string) or the literal string `"rest"`, used for read-only previewing of a different day than what's actually scheduled/committed (this preview mechanism itself dates from an earlier bug fix — previewing a day used to accidentally commit a session row, corrupting the strength/hypertrophy alternation; that fix is preserved and generalized here). `POST`'s body now takes `{ date, planDayId: number | null, status, isManualOverride }` instead of the old `{ date, dayType, ... }`.
+
+- **`src/app/api/exercises/route.ts`** and **`src/app/api/exercises/[id]/route.ts`** — rewritten to accept/return `planDayId` instead of `dayType` in query params and request/response bodies. Both files added an `ownsPlanDay(userId, planDayId)` helper that joins `plan_days` → `workout_plans` to verify the plan day actually belongs to the requesting user (since `plan_days` has no direct `userId` column of its own — ownership is always proven by joining up to the plan, same pattern as `exercise_links`/`exercise_set_log` joining up to their parent row).
+
+- **`src/app/api/plan/route.ts`** (new file) — `GET` returns `{ plan: Plan | null, days: PlanDay[] }` for the current user's one active plan, days ordered by `dayIndex`. This is what the frontend calls to know what to show in the day-type dropdown and labels.
+
+- **`src/app/api/plans/route.ts`** (new file) — `GET` lists **all** of the user's non-archived plans, each with its `days` array attached (for a future "switch plan" UI). `POST` creates a brand-new plan from `{ name, dayLabels: string[], fixedRestWeekday? }`, inserting one `plan_days` row per label at `dayIndex` 0..n-1. Deliberately does **not** auto-activate the new plan — it must be separately `PATCH`ed to `isActive: true` once its exercises are populated, specifically so a brand-new empty plan is never suddenly what the day view is showing mid-setup.
+
+- **`src/app/api/plans/[id]/route.ts`** (new file) — `PATCH` supports renaming (`name`), changing `fixedRestWeekday`, and activating (`isActive: true` — which first deactivates any other currently-active plan for that same user via a `ne(workoutPlans.id, numericId)` update, since only one plan can be active at a time). `DELETE` soft-archives (`archived: true, isActive: false`) rather than hard-deleting, so historical `workout_sessions`/`exercises` rows that reference its `plan_days` still resolve correctly for old data.
+
+- **`src/app/api/plans/[id]/days/route.ts`** (new file) — `POST` appends one new day at the next available `dayIndex` (computed via a `max(planDays.dayIndex)` aggregate query — note the aggregate result needs a null-check since Drizzle's typing doesn't know it always returns exactly one row: `const [row0] = await db.select({ value: max(...) })...; const nextIndex = row0?.value == null ? 0 : row0.value + 1;`). `PATCH` reorders **all** days in one call given a full `{ orderedDayIds: number[] }` array, validated to contain exactly the plan's current day ids; the reorder itself is a two-pass update (first push every day to a temporary high `dayIndex` range starting at 1000, then assign the real final 0..n-1 indexes) specifically to never transiently collide with the `unique(planId, dayIndex)` constraint mid-update.
+
+- **`src/app/api/plans/[id]/days/[dayId]/route.ts`** (new file) — `PATCH` renames a day and/or changes its `variantMode`. `DELETE` is blocked with a 409 if any non-archived `exercises` row still references that `planDayId` — the caller must move or delete those exercises first, rather than the day silently orphaning them.
+
+- **`scripts/create-user.ts`** — rewritten (see Architecture map above for the exact remapping logic).
+
+- **`scripts/seed.ts` and `scripts/seed-ppl-program.ts`** — deleted. Both were legacy one-time scripts hardcoded to `userId = 1` from a much earlier phase, and both hardcoded the now-nonexistent `dayType` field into their insert data, so they could never run again anyway; deleting rather than maintaining broken dead code that referenced a schema that no longer exists.
+
+- **`package.json`** — the `db:seed` and `db:seed-ppl` script entries were removed since they pointed at the now-deleted files. `db:seed-supplements` and `create-user` remain.
+
+### Frontend status: DONE — `src/app/page.tsx` now compiles clean (historical section below kept as a record of what the fix involved)
+
+**This entire section describes the state before the fix landed (commit `7e88e79`, 2026-09-19). It is no longer the current state** — kept verbatim below because it's an accurate record of exactly what was wrong and how each of the 7 items was fixed, in case that's useful context later (e.g. if a regression is suspected). The 23 `tsc` errors listed at the end of this section are all gone; `npx tsc --noEmit` now returns clean.
+
+This was the one file standing between "backend/DB is done" and "outage resolved." Everything below was exactly accurate as of the original handoff (re-verified by re-running `npx tsc --noEmit` immediately before writing this).
+
+**Already done in this file:**
+- New type definitions added: `type VariantMode = "none" | "strength_hypertrophy";`, `type PlanDay = { id: number; planId: number; dayIndex: number; label: string; variantMode: VariantMode };`, `type Plan = { id: number; name: string; isActive: boolean; fixedRestWeekday: number | null };`.
+- `type Exercise`: its `dayType: string` field was changed to `planDayId: number`.
+- The old `type DayType = "Push" | "Pull" | "Legs" | "Rest";` union was **deleted entirely** (this is why some remaining references to `DayType` below are now hard compile errors, not just semantic mismatches).
+- `type WorkoutState` changed from `{ dayType: DayType; status; suggested; variant; log }` to:
+  ```ts
+  type WorkoutState = {
+    planDayId: number | null; // null = Rest
+    label: string;
+    variantMode: VariantMode;
+    status: string;
+    suggested: boolean;
+    variant: Variant;
+    log: ExerciseLogRow[];
+  };
+  ```
+- New state added: `const [activePlan, setActivePlan] = useState<Plan | null>(null);` and `const [planDaysList, setPlanDaysList] = useState<PlanDay[]>([]);`.
+- The initial `workout` useState default was updated to the new shape: `{ planDayId: null, label: "", variantMode: "none", status: "planned", suggested: true, variant: null, log: [] }`.
+- The `exEdit` form-state object's `dayType: "Push"` field was changed to `planDayId: null as number | null`.
+- The old `expandedDayTypes` state (was `Set<string>`, tracked which of Push/Pull/Legs was expanded in the manage-exercises list) was **renamed** to `expandedPlanDays` (now `Set<number>`, keyed by `plan_days.id` instead of a hardcoded label string) — the state declaration itself, at line 350, now reads `const [expandedPlanDays, setExpandedPlanDays] = useState<Set<number>>(new Set());`. **Important:** the rename only touched the declaration — two usages further down the file (lines 1218 and 1223, described below) still say the old names and are now broken references to variables that no longer exist.
+- `const [showManagePlans, setShowManagePlans] = useState(false);` was added, anticipating a future "Manage Plans" UI panel — **declared but not yet wired to any actual UI.** No JSX for creating/switching/editing plans exists yet anywhere in this file. This is understood to be lower priority than fixing the compile errors and restoring basic functionality against the already-migrated single "PPL" plan every user currently has.
+- `loadWorkout` was rewritten:
+  ```ts
+  const loadWorkout = useCallback(async (d: string, previewPlanDayId?: number | "rest") => {
+    const url = previewPlanDayId !== undefined ? `/api/workout?date=${d}&previewPlanDayId=${previewPlanDayId}` : `/api/workout?date=${d}`;
+    const res = await fetch(url);
+    const data: WorkoutState = await res.json();
+    setWorkout(data);
+    if (data.planDayId !== null) {
+      const variantParam = data.variant ? `&variant=${data.variant}` : "";
+      const exRes = await fetch(`/api/exercises?planDayId=${data.planDayId}${variantParam}`);
+      setExerciseOptions(await exRes.json());
+    } else {
+      setExerciseOptions([]);
+    }
+  }, []);
+  ```
+- A new `loadPlan` function was added and wired into its own `useEffect` right after the main date-driven mount effect:
+  ```ts
+  const loadPlan = useCallback(async () => {
+    const res = await fetch("/api/plan");
+    const data: { plan: Plan | null; days: PlanDay[] } = await res.json();
+    setActivePlan(data.plan);
+    setPlanDaysList(data.days);
+  }, []);
+  // ...
+  useEffect(() => { loadPlan(); }, [loadPlan]);
+  ```
+- `commitSession`'s signature changed to `commitSession(planDayId: number | null, status: string, isManualOverride = false)`, and its request body now sends `{ date, planDayId, status, isManualOverride }`.
+- `addExerciseToLog`'s auto-commit-on-first-log side effect now sends `planDayId: workout.planDayId` in its request body instead of `dayType: workout.dayType`.
+- `addCustomExercise`'s guard changed from `workout.dayType === "Rest"` to `workout.planDayId === null`, and its request body now sends `planDayId: workout.planDayId`.
+- `startEditEx` now copies `planDayId: ex.planDayId` into the `exEdit` form state instead of `dayType`.
+- `saveEditEx`'s `PATCH` body now sends `planDayId: exEdit.planDayId` instead of `dayType`.
+- The old `manageExerciseRows` grouping logic (used to build the collapsible list in the "manage exercise library" panel) was rewritten from hardcoding `(["Push","Pull","Legs"] as const).forEach(...)` to iterating `planDaysList` dynamically:
+  ```ts
+  const manageExerciseRows: ({ type: "header"; key: number; label: string } | { type: "exercise"; ex: Exercise })[] = [];
+  if (exerciseSearchActive) {
+    // ...unchanged search-mode branch...
+  } else {
+    planDaysList.forEach((pd) => {
+      const group = allExercises.filter((ex) => ex.planDayId === pd.id);
+      if (group.length === 0) return;
+      manageExerciseRows.push({ type: "header", key: pd.id, label: `${pd.label} (${group.length})` });
+      if (expandedPlanDays.has(pd.id)) {
+        group.forEach((ex) => manageExerciseRows.push({ type: "exercise", ex }));
+      }
+    });
+  }
+  ```
+  This part is done and correct — it uses the renamed `expandedPlanDays` state correctly. The dead `const dayTypeColor = workout.dayType === "Rest" ? inkDim : amber;` line that used to sit just above this block (confirmed via `grep` to be referenced nowhere else in the file, i.e. genuinely dead code, not just misnamed) was deleted outright rather than fixed, since nothing used it.
+
+**NOT yet done — this is the exact remaining work, in top-to-bottom file order, each confirmed by directly reading the current file content at the given lines and independently confirmed by the current `npx tsc --noEmit` output (23 errors total, all in this file, all listed below mapped to their fix):**
+
+1. **Lines 861–899 — the main workout card's background/border styling, badge text, and the day-picker `<select>` itself.** Current (broken) code:
+   ```tsx
+   background: workout.dayType === "Rest" ? bg2 : `linear-gradient(135deg, ${bg2}, ${bg})`,
+   border: `1px solid ${workout.dayType === "Rest" ? line : amber + "55"}`,
+   // ...
+   marginBottom: workout.dayType !== "Rest" ? 12 : 0
+   // ...
+   <div style={{ fontSize: 20 }}>{workout.dayType === "Rest" ? "💤" : "🏋️"}</div>
+   // ...
+   {workout.dayType === "Rest" ? "Rest day" : `${workout.dayType} day`}
+   // ...
+   {workout.dayType !== "Rest" && (
+     <div ...>{exDoneCount}/{workout.log.length || 0} exercises done</div>
+   )}
+   // ...
+   <select
+     value={workout.dayType}
+     onChange={(e) => loadWorkout(date, e.target.value as DayType)}
+     style={{ ...smallInputStyle, width: "auto" }}
+   >
+     <option value="Push">Push</option>
+     <option value="Pull">Pull</option>
+     <option value="Legs">Legs</option>
+     <option value="Rest">Rest</option>
+   </select>
+   ```
+   Every `workout.dayType === "Rest"` / `!== "Rest"` here needs to become `workout.planDayId === null` / `!== null`. The badge text `${workout.dayType} day` needs to become `${workout.label} day` (the API already returns a `label` string on the `WorkoutState`, sourced from the `plan_days.label` column — no lookup needed, it's already on the object). The `<select>` needs its hardcoded options replaced with one `<option>` per entry in `planDaysList` (value = `String(day.id)`, text = `day.label`) plus one hardcoded `<option value="rest">Rest</option>`, and its `value` prop needs to become `workout.planDayId === null ? "rest" : String(workout.planDayId)`. Its `onChange` needs to parse the selected string back: if it's the literal `"rest"`, call `loadWorkout(date, "rest")`; otherwise `loadWorkout(date, Number(e.target.value))` (matching the already-updated `loadWorkout(d: string, previewPlanDayId?: number | "rest")` signature).
+
+2. **Line 902 — `{workout.dayType !== "Rest" && (` wrapping the entire exercise-log/quick-add section.** Needs to become `{workout.planDayId !== null && (`.
+
+3. **Line 1064 — `<button onClick={() => commitSession(workout.dayType, "done")} style={primaryBtn}>`.** Needs to become `commitSession(workout.planDayId, "done")` (this is the "Mark day done" button; `commitSession`'s signature already accepts `planDayId: number | null` as its first argument, so this is a pure call-site fix, no other change needed).
+
+4. **Lines 1088–1091 — the "Confirm rest day" button.**
+   ```tsx
+   {workout.dayType === "Rest" && workout.status !== "rest" && (
+     <button onClick={() => commitSession("Rest", "rest", true)} style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}>
+       Confirm rest day
+     </button>
+   )}
+   ```
+   Needs to become `{workout.planDayId === null && workout.status !== "rest" && (` and `commitSession(null, "rest", true)`.
+
+5. **Lines 1117–1205 — the entire "Full Program table" modal, currently driven by the deleted `PROGRAM_SECTIONS` constant** (this constant no longer exists anywhere in the file — it was removed at the very start of the Phase 3 rewrite since it was a hardcoded 6-tuple array of `[dayType, variant, label]` for exactly Push/Pull/Legs × strength/hypertrophy). Current code references `PROGRAM_SECTIONS[programPage]`, `PROGRAM_SECTIONS.length` (three separate spots: the pager label, and both the prev/next button's disabled-state and onClick math), and filters `allExercises` by `ex.dayType === dt`. This whole section needs to be rebuilt to derive its list of "sections" dynamically from `planDaysList`: for each plan day, if its `variantMode === 'strength_hypertrophy'`, produce two sections (one for `'strength'`, one for `'hypertrophy'`, each labeled something like `${day.label} · Strength` / `${day.label} · Hypertrophy`); if `variantMode === 'none'`, produce one section (labeled just `day.label`, filtering exercises where `variant === 'standard'` or just not filtering by variant at all since there's nothing to distinguish). The filter predicate itself needs to change from `ex.dayType === dt && (ex.variant === v || ex.variant === "standard")` to `ex.planDayId === day.id && (ex.variant === v || ex.variant === "standard")` (or just `ex.planDayId === day.id` for the no-variant case). The simplest implementation is probably to compute this derived `sections` array once (e.g. via `useMemo` keyed on `planDaysList`) rather than inline in the render, replacing every `PROGRAM_SECTIONS` reference with that computed array.
+
+6. **Lines 1218 and 1223 — leftover references to the old, now-renamed collapse-state variable name inside the manage-exercise-library rendering** (note: this is *inside* the JSX that renders `manageExerciseRows`, which itself was already correctly rewritten to produce `{ type: "header", key: pd.id, ... }` rows keyed by numeric plan-day id — only the render-side reference to the state variable's old name is stale):
+   ```tsx
+   const expanded = expandedDayTypes.has(row.key);
+   // ...
+   onClick={() =>
+     setExpandedDayTypes((prev) => {
+       const next = new Set(prev);
+       if (next.has(row.key)) next.delete(row.key);
+       else next.add(row.key);
+       return next;
+     })
+   }
+   ```
+   These two identifiers just need to be renamed to the already-existing `expandedPlanDays` / `setExpandedPlanDays` (declared at line 350) — no logic change needed, this is a pure find-and-replace of the variable name within this one block. (There is also a `Parameter 'prev' implicitly has an 'any' type` error reported by tsc at this exact spot, which is a downstream symptom of `setExpandedDayTypes` not resolving to anything — it will resolve itself once the correct, already-typed `setExpandedPlanDays` setter is used instead.)
+
+7. **Lines 1261–1262 and 1306 — the exercise create/edit form's day-type picker and the exercise list's display string.**
+   ```tsx
+   <select
+     value={exEdit.dayType}
+     onChange={(e) => setExEdit({ ...exEdit, dayType: e.target.value })}
+     style={smallInputStyle}
+   >
+     <option value="Push">Push</option>
+     <option value="Pull">Pull</option>
+     <option value="Legs">Legs</option>
+   </select>
+   ```
+   and, further down in the non-editing display row:
+   ```tsx
+   {ex.name} <span style={{ color: inkDim }}>· {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}</span>
+   ```
+   The `<select>` needs to become dynamic, populated from `planDaysList` (one `<option value={String(day.id)}>{day.label}</option>` per entry — note `exEdit.planDayId` is typed `number | null`, so the `value` prop needs `exEdit.planDayId === null ? "" : String(exEdit.planDayId)` and the `onChange` needs `setExEdit({ ...exEdit, planDayId: Number(e.target.value) })`). The display string needs to look up the owning plan day's `label` by `ex.planDayId` — since `Exercise` objects don't carry the label directly (only the numeric id), the simplest fix is a small lookup map derived once from `planDaysList`, e.g. `const planDayById = useMemo(() => Object.fromEntries(planDaysList.map((d) => [d.id, d])), [planDaysList]);`, then render `{planDayById[ex.planDayId]?.label ?? "?"}` in place of `{ex.dayType}`.
+
+**Exact current `npx tsc --noEmit` output** (re-run immediately before writing this handoff, for anyone who wants to verify the above is still accurate or track progress by re-running it — the count should drop to 0 once all seven items above are fixed):
+```
+src/app/page.tsx(861,33): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(862,42): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(867,119): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(869,54): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(872,28): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(872,73): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(883,26): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(891,30): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(892,68): error TS2304: Cannot find name 'DayType'.
+src/app/page.tsx(902,20): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(1064,64): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(1088,20): error TS2339: Property 'dayType' does not exist on type 'WorkoutState'.
+src/app/page.tsx(1089,50): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+src/app/page.tsx(1119,36): error TS2304: Cannot find name 'PROGRAM_SECTIONS'.
+src/app/page.tsx(1121,50): error TS2339: Property 'dayType' does not exist on type 'Exercise'.
+src/app/page.tsx(1152,44): error TS2304: Cannot find name 'PROGRAM_SECTIONS'.
+src/app/page.tsx(1155,69): error TS2304: Cannot find name 'PROGRAM_SECTIONS'.
+src/app/page.tsx(1156,49): error TS2304: Cannot find name 'PROGRAM_SECTIONS'.
+src/app/page.tsx(1218,38): error TS2304: Cannot find name 'expandedDayTypes'.
+src/app/page.tsx(1223,27): error TS2304: Cannot find name 'setExpandedDayTypes'.
+src/app/page.tsx(1223,48): error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/app/page.tsx(1261,41): error TS2339: Property 'dayType' does not exist on type '{ name: string; planDayId: number | null; defaultSets: string; defaultReps: string; muscleGroup: string; trackingType: TrackingType; }'.
+src/app/page.tsx(1262,67): error TS2353: Object literal may only specify known properties, and 'dayType' does not exist in type 'SetStateAction<{ name: string; planDayId: number | null; defaultSets: string; defaultReps: string; muscleGroup: string; trackingType: TrackingType; }>'.
+src/app/page.tsx(1306,73): error TS2339: Property 'dayType' does not exist on type 'Exercise'.
+```
+
+### Historical: uncommitted working-tree state at the time this was written — now committed and pushed
+
+```
+ M package.json
+ M scripts/create-user.ts
+ D scripts/seed-ppl-program.ts
+ D scripts/seed.ts
+ M src/app/api/exercises/[id]/route.ts
+ M src/app/api/exercises/route.ts
+ M src/app/api/workout/route.ts
+ M src/app/page.tsx
+ M src/lib/rotation.ts
+ M src/lib/schema.ts
+ M tsconfig.tsbuildinfo
+?? src/app/api/plan/
+?? src/app/api/plans/
+```
+All of the above (everything except this HANDOFF.md itself) was committed as `7e88e79` ("fix: finish Phase 3 plan-builder rewrite in page.tsx, resolve outage") on top of `f6d64f1`, and pushed to `main`. This HANDOFF.md was committed separately right after, per the project's established convention of a dedicated handoff commit.
+
+### Phase 3 sub-items not yet started at all (lower priority than the compile-error fix above, do not start these until the outage is resolved)
+
+- **Manage Plans UI** — the actual point of Phase 3 (letting a user create a new plan with custom day labels, switch their active plan, and add/rename/reorder/delete days) has **zero frontend UI** built yet. The `showManagePlans` boolean state exists but nothing reads it. All five backend routes for this (`/api/plans`, `/api/plans/[id]`, `/api/plans/[id]/days`, `/api/plans/[id]/days/[dayId]`) are fully built and typecheck clean, waiting for a UI to call them.
+- **Canonical muscle taxonomy** — replacing the current free-text `muscleGroup` strings with a real researched list of proper muscle names (the user explicitly asked to "look for proper muscle names, build the list even more"; a draft list exists in the plan file at `C:\Users\krish\.claude\plans\1-i-should-be-foamy-engelbart.md` but hasn't been finalized or wired in).
+- **Exercise alternatives** — user explicitly asked for interchangeable-exercise groups (example given: Face Pulls ↔ Reverse Pec Deck Fly, as a fallback when a machine is unavailable). Planned schema: `exercises.alternativeGroupId` (nullable int; exercises sharing a group id are considered interchangeable), plus a "⇄ swap" affordance in the exercise-log UI. Not started.
+- **`exercises.priority`** (int, lower = do first) — for ordering a day's exercise list by fatigue-management logic (compounds before isolations). Not started.
+- **Custom-exercise creation form field parity** — the quick "+ Custom exercise" form in the main workout card currently only asks for name/sets/reps, while the manage-panel's edit form has muscle group, tracking type, etc. The user asked for these to have full parity (muscle picker, rest seconds, priority, inline tutorial links) — not started, and blocked behind finishing the current compile-error fixes first.
+
+## What's NOT done yet (Phases 4 and 5, entirely unstarted, come after Phase 3)
 
 **Phase 4 — Dashboard + Calendar** (not started):
 - Dashboard: 7/30-day rolling protein/kcal averages, weight trend slope, workout consistency streak, supplement adherence streak, one computed "what to improve" line.
 - Calendar: month grid colored by daily goal-hit status, click a day to jump the existing date-based view to it.
 
 **Phase 5 — Theming** (not started):
-- Refactor hardcoded color constants in `page.tsx` (`ink`, `bg`, `amber`, etc.) into CSS custom properties, add a light theme + toggle (localStorage-persisted).
+- Refactor hardcoded color constants in `page.tsx` (`ink`, `bg`, `amber`, etc.) into CSS custom properties, add a light theme + toggle (localStorage-persisted), plus a "legible/minimal, contrast" consideration the user raised.
 
-**Explicitly deferred by the user, not planned:** local-first IndexedDB storage with manual Google-Drive-style backup/sync (Obsidian-style). Flagged tension in the plan file: this pulls against the multi-user centralized-Postgres direction everything else is built toward — if picked up later, it likely wants to be an offline *cache* layer on top of Neon (PWA + background sync), not a replacement.
+**Explicitly deferred by the user, not currently planned:** local-first IndexedDB storage with manual Google-Drive-style backup/sync, analogous to how Obsidian syncs a local vault ("later i plan to make the db like browsers index db but can manual sync the backup to gdrive like obsidian etc."). Flagged tension in the plan file: this pulls against the multi-user centralized-Postgres direction everything else is built toward — if picked up later, it likely wants to be an offline *cache* layer on top of Neon (PWA + background sync), not a replacement for the Postgres backend.
 
-## Immediate next step
+## Immediate next step for a new session picking this up
 
-Two options were on the table when this handoff was written:
-1. Start Phase 3 (custom plan builder) — the big one.
-2. Add the other 1-4 users via `create-user.ts` first and live with multi-user for a bit before the plan builder changes the data model again.
+**Steps 1-7 below (the outage fix) are done as of 2026-09-19 — see "RESOLVED" at the top of this document.** Kept here as a record of the process that was followed, and because step 8 onward is still the actual next action.
 
-No decision was made yet — ask the user which they'd rather do first.
+1. ~~Read this entire document.~~ (still do this first, always)
+2. ~~Open `src/app/page.tsx` and work through the seven numbered items in the "NOT yet done" list above.~~ Done — see the "Frontend status: DONE" section.
+3. ~~Run `npx tsc --noEmit` and confirm it drops to zero errors.~~ Done, confirmed clean.
+4. ~~Run `rm -rf .next && npm run build` and confirm a clean production build.~~ Done.
+5. ~~Smoke-test locally via `next start` against the real DB.~~ Done — see the verification list under "RESOLVED".
+6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`.
+7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done — `dpl_8JXFHurVjdVWYfoiwx7RrFeca9Tw` is `READY`, aliased to `fitkr.vercel.app`, clean error window since deploy.
+8. **← Start here.** Ask the user whether to proceed to the "Manage Plans UI" (the actual point of Phase 3 — letting a user create/switch/edit their own plans instead of everyone being stuck on the one auto-created "PPL" plan; all 5 backend routes for it already exist and typecheck clean, see "Phase 3 sub-items not yet started" above) or something else — do not assume.
+9. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
