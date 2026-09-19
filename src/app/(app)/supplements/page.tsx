@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useDate } from "../_lib/DateContext";
-import { ink, inkDim, bg, line, green, tinyBtn, sectionLabel, smallInputStyle, primaryBtn, secondaryBtn } from "../_components/shared";
+import { CenteredLoading } from "../_components/shared";
 
 type Supplement = { id: number; name: string; time: string; archived: boolean };
 
@@ -81,97 +81,61 @@ export default function SupplementsPage() {
     await fetch(`/api/supplements/${id}`, { method: "DELETE" });
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
-        Loading…
-      </div>
-    );
-  }
+  if (loading) return <CenteredLoading />;
 
   const suppDoneCount = supplements.filter((s) => suppLog[String(s.id)]).length;
 
   return (
     <div>
-      <div style={sectionLabel}>
+      <div className="section-label">
         SUPPLEMENTS · {suppDoneCount}/{supplements.length}
       </div>
-      <div style={{ border: `1px solid ${line}`, marginBottom: 8 }}>
-        {supplements.map((s, idx) => {
+      <div className="border border-border mb-2">
+        {supplements.map((s) => {
           const done = !!suppLog[String(s.id)];
           return (
-            <button
-              key={s.id}
-              onClick={() => toggleSupp(String(s.id))}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                width: "100%",
-                padding: "10px 12px",
-                background: "none",
-                border: "none",
-                borderBottom: idx < supplements.length - 1 ? `1px solid ${line}` : "none",
-                textAlign: "left",
-              }}
-            >
+            <button key={s.id} onClick={() => toggleSupp(String(s.id))} className="list-row flex justify-between items-center w-full bg-transparent text-left">
               <div>
-                <div style={{ fontSize: 14, color: done ? inkDim : ink, textDecoration: done ? "line-through" : "none" }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: inkDim }}>{s.time}</div>
+                <div className={`text-sm ${done ? "text-muted-foreground line-through" : "text-foreground"}`}>{s.name}</div>
+                <div className="text-[11px] text-muted-foreground">{s.time}</div>
               </div>
-              <div
-                style={{
-                  width: 20,
-                  height: 20,
-                  border: `1.5px solid ${done ? green : line}`,
-                  background: done ? green : "transparent",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  color: bg,
-                  fontWeight: 700,
-                  fontSize: 12,
-                }}
-              >
-                {done ? "✓" : ""}
-              </div>
+              <div className={`checkbox ${done ? "checkbox-done" : ""}`}>{done ? "✓" : ""}</div>
             </button>
           );
         })}
       </div>
 
-      <button onClick={() => setShowManageSupplements((v) => !v)} style={{ ...tinyBtn, width: "100%", marginBottom: 20 }}>
+      <button onClick={() => setShowManageSupplements((v) => !v)} className="btn-tiny w-full mb-5">
         {showManageSupplements ? "Hide" : "Manage"} supplement list
       </button>
       {showManageSupplements && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ border: `1px solid ${line}` }}>
-            {supplements.map((s, idx) => (
-              <div key={s.id} style={{ padding: "8px 10px", borderBottom: idx < supplements.length - 1 ? `1px solid ${line}` : "none" }}>
+        <div className="mb-5">
+          <div className="border border-border">
+            {supplements.map((s) => (
+              <div key={s.id} className="list-row">
                 {editingSuppId === s.id ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <input value={suppEdit.name} onChange={(e) => setSuppEdit({ ...suppEdit, name: e.target.value })} style={smallInputStyle} />
-                    <input value={suppEdit.time} onChange={(e) => setSuppEdit({ ...suppEdit, time: e.target.value })} style={smallInputStyle} placeholder="e.g. AM · with food" />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => saveEditSupp(s.id)} style={{ ...primaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+                  <div className="flex flex-col gap-1.5">
+                    <input value={suppEdit.name} onChange={(e) => setSuppEdit({ ...suppEdit, name: e.target.value })} className="input-sm" />
+                    <input value={suppEdit.time} onChange={(e) => setSuppEdit({ ...suppEdit, time: e.target.value })} className="input-sm" placeholder="e.g. AM · with food" />
+                    <div className="flex gap-1.5">
+                      <button onClick={() => saveEditSupp(s.id)} className="btn-primary flex-1 py-1.5 text-xs">
                         Save
                       </button>
-                      <button onClick={() => setEditingSuppId(null)} style={{ ...secondaryBtn, flex: 1, padding: "6px 10px", fontSize: 12 }}>
+                      <button onClick={() => setEditingSuppId(null)} className="btn-secondary flex-1 py-1.5 text-xs">
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 13 }}>
-                      {s.name} <span style={{ color: inkDim }}>· {s.time}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[13px]">
+                      {s.name} <span className="text-muted-foreground">· {s.time}</span>
                     </span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={() => startEditSupp(s)} style={tinyBtn}>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => startEditSupp(s)} className="btn-tiny">
                         Edit
                       </button>
-                      <button onClick={() => deleteSupplement(s.id)} style={tinyBtn}>
+                      <button onClick={() => deleteSupplement(s.id)} className="btn-tiny">
                         Delete
                       </button>
                     </div>
@@ -180,10 +144,10 @@ export default function SupplementsPage() {
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <input placeholder="New supplement name" value={newSuppName} onChange={(e) => setNewSuppName(e.target.value)} style={{ ...smallInputStyle, flex: 1 }} />
-            <input placeholder="Time (optional)" value={newSuppTime} onChange={(e) => setNewSuppTime(e.target.value)} style={{ ...smallInputStyle, flex: 1 }} />
-            <button onClick={addSupplement} style={{ ...primaryBtn, padding: "6px 12px", fontSize: 13 }}>
+          <div className="flex gap-2 mt-2">
+            <input placeholder="New supplement name" value={newSuppName} onChange={(e) => setNewSuppName(e.target.value)} className="input-sm flex-1" />
+            <input placeholder="Time (optional)" value={newSuppTime} onChange={(e) => setNewSuppTime(e.target.value)} className="input-sm flex-1" />
+            <button onClick={addSupplement} className="btn-primary py-1.5 px-3 text-[13px]">
               Add
             </button>
           </div>

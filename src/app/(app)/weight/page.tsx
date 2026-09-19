@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useDate } from "../_lib/DateContext";
-import { inkDim, amber, cardStyle, inputStyle, primaryBtn, sectionLabel } from "../_components/shared";
+import { CenteredLoading } from "../_components/shared";
 
 type WeightEntry = { date: string; weight: number };
 
@@ -34,13 +34,7 @@ export default function WeightPage() {
     setWeightInput("");
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
-        Loading…
-      </div>
-    );
-  }
+  if (loading) return <CenteredLoading />;
 
   const last8Weights = weights.slice(-8);
   const minW = last8Weights.length ? Math.min(...last8Weights.map((w) => w.weight)) - 0.5 : 0;
@@ -48,24 +42,24 @@ export default function WeightPage() {
 
   return (
     <div>
-      <div style={sectionLabel}>WEIGHT LOG</div>
-      <div style={cardStyle}>
-        <div style={{ display: "flex", gap: 8, marginBottom: last8Weights.length ? 16 : 0 }}>
+      <div className="section-label">WEIGHT LOG</div>
+      <div className="card">
+        <div className={`flex gap-2 ${last8Weights.length ? "mb-4" : ""}`}>
           <input
             placeholder="kg, e.g. 89.4"
             type="number"
             step="0.1"
             value={weightInput}
             onChange={(e) => setWeightInput(e.target.value)}
-            style={{ ...inputStyle, flex: 1 }}
+            className="input flex-1"
           />
-          <button onClick={logWeight} style={primaryBtn}>
+          <button onClick={logWeight} className="btn-primary">
             Log
           </button>
         </div>
         {last8Weights.length > 0 && (
           <div>
-            <svg viewBox="0 0 300 80" style={{ width: "100%", height: 80, overflow: "visible" }}>
+            <svg viewBox="0 0 300 80" className="w-full h-20 overflow-visible">
               <polyline
                 points={last8Weights
                   .map((w, i) => {
@@ -75,16 +69,16 @@ export default function WeightPage() {
                   })
                   .join(" ")}
                 fill="none"
-                stroke={amber}
+                className="stroke-primary"
                 strokeWidth="2"
               />
               {last8Weights.map((w, i) => {
                 const x = last8Weights.length > 1 ? (i / (last8Weights.length - 1)) * 290 + 5 : 150;
                 const y = 75 - ((w.weight - minW) / (maxW - minW || 1)) * 70;
-                return <circle key={w.date} cx={x} cy={y} r="3" fill={amber} />;
+                return <circle key={w.date} cx={x} cy={y} r="3" className="fill-primary" />;
               })}
             </svg>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: inkDim, marginTop: 4 }}>
+            <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
               <span>{last8Weights[0]!.weight}kg</span>
               <span>{last8Weights[last8Weights.length - 1]!.weight}kg latest</span>
             </div>

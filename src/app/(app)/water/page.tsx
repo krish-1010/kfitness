@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useDate } from "../_lib/DateContext";
-import { inkDim, green, amber, line, cardStyle, inputStyle, smallInputStyle, primaryBtn, secondaryBtn, sectionLabel, ProgressBar } from "../_components/shared";
+import { CenteredLoading, ProgressBar } from "../_components/shared";
 
 type WaterEntry = { id: number; date: string; amountMl: number; createdAt: string };
 
@@ -69,17 +69,11 @@ export default function WaterPage() {
     await fetch(`/api/water/${id}`, { method: "DELETE" });
   };
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: inkDim }}>
-        Loading…
-      </div>
-    );
-  }
+  if (loading) return <CenteredLoading />;
 
   return (
     <div>
-      <div style={{ ...sectionLabel, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="section-label flex justify-between items-center">
         <span>
           WATER · {(waterTotal / 1000).toFixed(2)}L{waterTarget ? ` / ${(waterTarget / 1000).toFixed(1)}L` : ""} today
         </span>
@@ -89,62 +83,62 @@ export default function WaterPage() {
               setWaterTargetInput(String(waterTarget));
               setEditingWaterTarget(true);
             }}
-            style={{ background: "none", border: "none", color: inkDim, fontSize: 11, textDecoration: "underline", padding: 0 }}
+            className="bg-transparent border-none text-muted-foreground text-[11px] underline p-0"
           >
             edit target
           </button>
         )}
       </div>
       {editingWaterTarget && (
-        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <div className="flex gap-1.5 mb-2">
           <input
             type="number"
             value={waterTargetInput}
             onChange={(e) => setWaterTargetInput(e.target.value)}
             placeholder="Target ml"
-            style={{ ...smallInputStyle, flex: 1 }}
+            className="input-sm flex-1"
           />
-          <button onClick={saveWaterTarget} style={{ ...primaryBtn, padding: "6px 12px", fontSize: 12 }}>
+          <button onClick={saveWaterTarget} className="btn-primary py-1.5 px-3 text-xs">
             Save
           </button>
-          <button onClick={() => setEditingWaterTarget(false)} style={{ ...secondaryBtn, padding: "6px 12px", fontSize: 12 }}>
+          <button onClick={() => setEditingWaterTarget(false)} className="btn-secondary py-1.5 px-3 text-xs">
             Cancel
           </button>
         </div>
       )}
-      <div style={cardStyle}>
+      <div className="card">
         {waterTarget !== null && (
-          <div style={{ marginBottom: 10 }}>
-            <ProgressBar value={waterTotal} goal={waterTarget} color={waterTotal >= waterTarget ? green : amber} />
+          <div className="mb-2.5">
+            <ProgressBar value={waterTotal} goal={waterTarget} variant={waterTotal >= waterTarget ? "good" : "default"} />
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div className="flex gap-2 mb-2.5">
           {WATER_PRESETS.map((ml) => (
-            <button key={ml} onClick={() => logWater(ml)} style={{ ...secondaryBtn, flex: 1, textAlign: "center" }}>
+            <button key={ml} onClick={() => logWater(ml)} className="btn-secondary flex-1 text-center">
               +{ml}ml
             </button>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="flex gap-2">
           <input
             placeholder="Custom ml"
             type="number"
             value={customWaterMl}
             onChange={(e) => setCustomWaterMl(e.target.value)}
-            style={{ ...inputStyle, flex: 1 }}
+            className="input flex-1"
           />
-          <button onClick={() => logWater(parseInt(customWaterMl) || 0)} style={primaryBtn}>
+          <button onClick={() => logWater(parseInt(customWaterMl) || 0)} className="btn-primary">
             Log
           </button>
         </div>
         {waterEntries.length > 0 && (
-          <div style={{ marginTop: 12, borderTop: `1px solid ${line}`, paddingTop: 10 }}>
+          <div className="mt-3 border-t border-border pt-2.5">
             {waterEntries.map((w) => (
-              <div key={w.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
-                <span style={{ fontSize: 13, color: inkDim }}>
+              <div key={w.id} className="flex justify-between items-center py-1">
+                <span className="text-[13px] text-muted-foreground">
                   {new Date(w.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} · {w.amountMl}ml
                 </span>
-                <button onClick={() => removeWater(w.id)} style={{ background: "none", border: "none", padding: 4, color: inkDim }}>
+                <button onClick={() => removeWater(w.id)} className="bg-transparent border-none p-1 text-muted-foreground">
                   ✕
                 </button>
               </div>

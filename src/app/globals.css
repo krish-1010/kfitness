@@ -222,6 +222,16 @@ input {
   .badge-info2 { --badge-color: var(--info2); }
   .badge-success { --badge-color: var(--success); }
   .badge-muted { --badge-color: var(--muted-foreground); }
+
+  /* Done/not-done checkbox — was independently reimplemented as a ternary
+     style object in both the Workout log and the Supplements checklist;
+     one shared pair of classes instead. */
+  .checkbox {
+    @apply w-5 h-5 border-[1.5px] border-border bg-transparent flex items-center justify-center shrink-0 text-background font-bold text-xs;
+  }
+  .checkbox-done {
+    @apply border-success bg-success;
+  }
 }
 
 .foodbtn:hover {
