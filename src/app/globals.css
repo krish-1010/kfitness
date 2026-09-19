@@ -24,3 +24,30 @@ input {
 .foodbtn:active {
   transform: scale(0.98);
 }
+
+/* App nav shell responsive breakpoint — the one deliberate exception to
+   inline-style-only, since style={{}} objects can't express @media. */
+.app-nav-sidebar {
+  display: flex;
+}
+.app-nav-bottombar {
+  display: none;
+}
+@media (max-width: 768px) {
+  .app-nav-sidebar {
+    display: none;
+  }
+  .app-nav-bottombar {
+    display: flex;
+  }
+}
+
+.app-content {
+  min-height: 100vh;
+  padding: 24px 16px 84px;
+}
+@media (min-width: 769px) {
+  .app-content {
+    padding: 24px 16px 24px 216px;
+  }
+}
