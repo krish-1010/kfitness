@@ -48,6 +48,27 @@ Verified via `next build` + `next start` against the live Neon DB: opened the ed
 
 **What's next:** the remaining Phase 3 sub-items (exercise alternatives / `alternativeGroupId`, `exercises.priority` for fatigue-ordering, custom-exercise form parity) or Phase 4 (dashboard/calendar) or Phase 5 (theming) — ask the user, don't assume.
 
+## ✅ RESOLVED — Phase 3 complete: exercise priority, alternatives, custom-form parity (2026-09-19, same day, next commit)
+
+User said "complete the phase 3... do it" — finished all three remaining sub-items in one sitting. Committed as `4aaabc5`, pushed, deployed (`dpl_8MiNeh87Vs2miCnnPV5maga9hSwe`, `READY`, aliased to `fitkr.vercel.app`), clean `get_runtime_errors` window since deploy. **Phase 3 (the custom plan builder) is now fully done** — the schema/rotation rewrite, the outage fix, the Manage Plans UI, the muscle taxonomy, and now these three all shipped and verified live.
+
+**Schema migration — run against the live Neon DB, additive only:**
+```sql
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 100;
+ALTER TABLE exercises ADD COLUMN IF NOT EXISTS alternative_group_id integer;
+```
+Both new columns, nothing dropped or altered — verified via a follow-up `SELECT count(*), count(priority)` that all 122 existing exercises picked up `priority=100` by default. **Note for future sessions:** this specific migration got blocked by the Claude Code auto-mode classifier ("Production Deploy" risk) even though it's a safe additive `ADD COLUMN IF NOT EXISTS` — had to explicitly ask the user to confirm before it would run. Expect the same prompt for any future direct-DB-write script, even harmless ones; don't try to route around it.
+
+**`exercises.priority`** (int, default 100, lower = do first): added `orderBy(asc(priority), asc(id))` to `GET /api/exercises`, which flows through everywhere that reads from it — the day's quick-add list, the manage-library grouping, `allExercises` generally. The Full Program table's sort now breaks block ties (main/core/conditioning) by priority instead of leaving them in insertion order. Editable via a new "Priority" input in both the manage-panel edit form and the custom-exercise quick-add form.
+
+**`exercises.alternativeGroupId`** (nullable int, exercises sharing a value are interchangeable): no separate groups table — deliberately reused one member's own `id` as the shared group id (`linkAlternative` in `page.tsx`: `groupId = ex.alternativeGroupId ?? target.alternativeGroupId ?? ex.id`), since exercise ids are already unique. UI: the edit form got a "+ Link alternative exercise…" picker (scoped to other exercises on the same plan day) when unlinked, or "Alternates with: X · Unlink" when linked; the collapsed row shows a small `⇄` badge. The exercise-log itself gets a `⇄` swap `<select>` per row when alternatives exist — picking one `PATCH`es `/api/workout/log/[id]` with a new `exerciseId` field (added alongside the existing `done` field), which repoints the log row **without touching its `exerciseSetLog` rows**, so any sets already logged carry over onto the substituted exercise rather than resetting. **Important correctness detail:** alternatives are resolved *server-side* in `/api/workout`'s `GET` handler (query every non-archived exercise sharing the group id, independent of variant) rather than off the client's `exerciseOptions`, because `exerciseOptions` is scoped to the day's currently-active strength/hypertrophy variant and would silently miss an alternative tagged with the *other* variant. `addExerciseToLog`'s optimistic local update still can't know this at insert time, so it does a best-effort guess from `exerciseOptions` and then (only when the newly added exercise actually has an `alternativeGroupId`) follows up with a `loadWorkout(date)` to reconcile against the correct server-side answer — this was caught and fixed during smoke-testing, not a hypothetical.
+
+**Custom-exercise quick-add form parity:** added muscle-group (the taxonomy dropdown from the previous commit), rest-seconds, priority, and tracking-type fields to the quick "+ Custom exercise" form in the main workout card, matching the manage-panel edit form. Discovered while doing this that the edit form itself was *also* missing a rest-seconds field (only `defaultSets`/`defaultReps` were editable there before) — added it there too, since parity would've been meaningless otherwise. After creating a custom exercise, its `ExerciseDetailModal` now auto-opens in manage mode (`setDetailTarget({..., manage: true})`) so a tutorial link can be attached immediately — satisfies the original ask ("nothing requires a second trip to the manage panel") by reusing the existing modal rather than building new inline UI for it.
+
+Verified via `next build` + `next start` against the live Neon DB: linked two real Chest exercises (Barbell Bench Press ↔ Machine Chest Press) as alternatives and confirmed the picker/badge/"Alternates with" text all round-tripped; set Barbell Bench Press's priority to 5 and confirmed it jumped to the top of the quick-add list (unprompted — just fell out of the `orderBy` change); logged it, used the `⇄` selector to swap to Machine Chest Press mid-log, confirmed the 4 existing (empty) sets carried over onto the new exercise; created a throwaway "Test Cable Fly" custom exercise through the expanded quick-add form and confirmed its detail modal auto-opened with tutorial-link fields ready. Reverted every piece of test data afterward via direct API calls (deleted the two test log rows, archived the throwaway exercise, unlinked the alternative group, reset priority back to 100) and confirmed via a final `GET` that the account matched its exact pre-test state.
+
+**What's next:** Phase 4 (dashboard: rolling protein/kcal averages, weight trend, workout streak; calendar: month grid colored by goal-hit status) or Phase 5 (theming: CSS custom properties, light/dark toggle) — ask the user, don't assume. The user also asked about swapping `react-muscle-highlighter` for the `body-muscles` npm package (70+ muscles, left/right split, more granular than either the diagram or the new taxonomy) — recommended holding off: `body-muscles` is a very young package (4 commits, ~29 stars, no dedicated React binding, imperative `BodyChart` class API) and swapping it in would mean rewriting `muscleSlug.ts`'s entire mapping plus `MuscleDiagram`/`ExerciseDetailModal`'s rendering for a cosmetic upgrade to something already working in production. If the user wants to revisit this, treat it as its own scoped session with a side-by-side prototype before removing the working library, not a quick swap.
+
 ---
 
 ## Historical: the outage as it was when this handoff was originally written — kept for context, not current
@@ -393,13 +414,13 @@ src/app/page.tsx(1306,73): error TS2339: Property 'dayType' does not exist on ty
 ```
 All of the above (everything except this HANDOFF.md itself) was committed as `7e88e79` ("fix: finish Phase 3 plan-builder rewrite in page.tsx, resolve outage") on top of `f6d64f1`, and pushed to `main`. This HANDOFF.md was committed separately right after, per the project's established convention of a dedicated handoff commit.
 
-### Phase 3 sub-items not yet started at all
+### Phase 3 sub-items — ALL DONE, PHASE 3 IS COMPLETE
 
 - ~~**Manage Plans UI**~~ — **done, see "RESOLVED — Manage Plans UI" near the top of this document.**
 - ~~**Canonical muscle taxonomy**~~ — **done, see "RESOLVED — Canonical muscle taxonomy" near the top of this document.**
-- **Exercise alternatives** — user explicitly asked for interchangeable-exercise groups (example given: Face Pulls ↔ Reverse Pec Deck Fly, as a fallback when a machine is unavailable). Planned schema: `exercises.alternativeGroupId` (nullable int; exercises sharing a group id are considered interchangeable), plus a "⇄ swap" affordance in the exercise-log UI. Not started.
-- **`exercises.priority`** (int, lower = do first) — for ordering a day's exercise list by fatigue-management logic (compounds before isolations). Not started.
-- **Custom-exercise creation form field parity** — the quick "+ Custom exercise" form in the main workout card currently only asks for name/sets/reps, while the manage-panel's edit form has muscle group (now the new taxonomy dropdown), tracking type, etc. The user asked for these to have full parity (muscle picker, rest seconds, priority, inline tutorial links) — not started.
+- ~~**Exercise alternatives**~~ — **done, see "RESOLVED — Phase 3 complete" near the top of this document.**
+- ~~**`exercises.priority`**~~ — **done, see "RESOLVED — Phase 3 complete" near the top of this document.**
+- ~~**Custom-exercise creation form field parity**~~ — **done, see "RESOLVED — Phase 3 complete" near the top of this document.**
 
 ## What's NOT done yet (Phases 4 and 5, entirely unstarted, come after Phase 3)
 
@@ -414,16 +435,17 @@ All of the above (everything except this HANDOFF.md itself) was committed as `7e
 
 ## Immediate next step for a new session picking this up
 
-**Everything numbered below is done as of 2026-09-19** — the outage fix (`7e88e79`), the Manage Plans UI (`8bc2bd8`), and the canonical muscle taxonomy (`29b3997`), all deployed and verified clean on `fitkr.vercel.app`. Kept as a record of the process followed. **Start at the bottom, "← Start here."**
+**Phase 3 is entirely done as of 2026-09-19** — outage fix (`7e88e79`), Manage Plans UI (`8bc2bd8`), canonical muscle taxonomy (`29b3997`), and exercise priority/alternatives/custom-form-parity (`4aaabc5`), all deployed and verified clean on `fitkr.vercel.app`. Kept as a record of the process followed. **Start at the bottom, "← Start here."**
 
 1. ~~Read this entire document.~~ (still do this first, always)
 2. ~~Open `src/app/page.tsx` and work through the seven numbered items in the "NOT yet done" list above.~~ Done — see the "Frontend status: DONE" section.
 3. ~~Run `npx tsc --noEmit` and confirm it drops to zero errors.~~ Done, confirmed clean.
 4. ~~Run `rm -rf .next && npm run build` and confirm a clean production build.~~ Done.
 5. ~~Smoke-test locally via `next start` against the real DB.~~ Done — see the verification list under "RESOLVED".
-6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`, `8bc2bd8`, `29b3997`.
-7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done for all three.
+6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`, `8bc2bd8`, `29b3997`, `4aaabc5`.
+7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done for all four.
 8. ~~Build the Manage Plans UI.~~ Done — see "RESOLVED — Manage Plans UI" near the top.
 9. ~~Build the canonical muscle taxonomy.~~ Done — see "RESOLVED — Canonical muscle taxonomy" near the top.
-10. **← Start here.** Ask the user which Phase 3 sub-item to pick up next (exercise alternatives / `alternativeGroupId`, `exercises.priority`, custom-exercise form parity — see "Phase 3 sub-items not yet started" above) or whether to move to Phase 4 (dashboard/calendar) or Phase 5 (theming) instead — do not assume.
+10. ~~Build exercise alternatives, priority, and custom-form parity.~~ Done — see "RESOLVED — Phase 3 complete" near the top.
+11. **← Start here.** Phase 3 is fully shipped. Ask the user whether to move to Phase 4 (dashboard: rolling protein/kcal averages, weight trend, workout/supplement streaks; calendar: month grid colored by goal-hit status) or Phase 5 (theming: CSS custom properties, light/dark toggle) — or the `body-muscles` diagram-library question the user raised (see "RESOLVED — Phase 3 complete" for the recommendation: hold off, treat as its own scoped prototype-first session if picked up). Do not assume which.
 11. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
