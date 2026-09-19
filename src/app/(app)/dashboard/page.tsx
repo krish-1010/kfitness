@@ -28,6 +28,7 @@ type WeightRow = { id: number; date: string; weight: number };
 // average, not a partial one.
 const CHART_WINDOW_DAYS = 30;
 const ROLLING_AVERAGE_DAYS = 7;
+const WEIGHT_WINDOW_DAYS = 90;
 
 function subtractDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -53,6 +54,7 @@ function buildRollingAverage(days: Record<string, DayAggregate>, today: string, 
 
 const proteinChartConfig: ChartConfig = { protein: { label: "Protein (g)", color: "var(--chart-1)" } };
 const kcalChartConfig: ChartConfig = { kcal: { label: "Calories", color: "var(--chart-2)" } };
+const weightChartConfig: ChartConfig = { weight: { label: "Weight (kg)", color: "var(--chart-3)" } };
 
 export default function DashboardPage() {
   // Dashboard's own rolling window/streaks anchor to the real system date,
@@ -83,6 +85,10 @@ export default function DashboardPage() {
 
   const proteinSeries = useMemo(() => buildRollingAverage(data?.days ?? {}, today, "protein"), [data, today]);
   const kcalSeries = useMemo(() => buildRollingAverage(data?.days ?? {}, today, "kcal"), [data, today]);
+  const weightSeries = useMemo(() => {
+    const cutoff = subtractDays(today, WEIGHT_WINDOW_DAYS);
+    return weights.filter((w) => w.date >= cutoff).map((w) => ({ date: w.date, value: w.weight }));
+  }, [weights, today]);
 
   if (loading || !data) return <CenteredLoading />;
 
@@ -117,10 +123,10 @@ export default function DashboardPage() {
         <div className="card">
           <div className="text-[11px] text-muted-foreground mb-1.5">PROTEIN (7-DAY AVG)</div>
           <ChartContainer config={proteinChartConfig} className="h-[140px] w-full aspect-auto">
-            <LineChart data={proteinSeries} margin={{ top: 5, right: 4, left: -24, bottom: 0 }}>
+            <LineChart data={proteinSeries} margin={{ top: 5, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tickLine={false} axisLine={false} fontSize={10} interval="preserveStartEnd" />
-              <YAxis tickLine={false} axisLine={false} fontSize={10} width={28} />
+              <YAxis tickLine={false} axisLine={false} fontSize={10} width={32} />
               <ReferenceLine y={proteinGoal} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Line dataKey="value" name="protein" type="monotone" stroke="var(--color-protein)" strokeWidth={2} dot={false} />
@@ -130,16 +136,29 @@ export default function DashboardPage() {
         <div className="card">
           <div className="text-[11px] text-muted-foreground mb-1.5">CALORIES (7-DAY AVG)</div>
           <ChartContainer config={kcalChartConfig} className="h-[140px] w-full aspect-auto">
-            <LineChart data={kcalSeries} margin={{ top: 5, right: 4, left: -24, bottom: 0 }}>
+            <LineChart data={kcalSeries} margin={{ top: 5, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tickLine={false} axisLine={false} fontSize={10} interval="preserveStartEnd" />
-              <YAxis tickLine={false} axisLine={false} fontSize={10} width={32} />
+              <YAxis tickLine={false} axisLine={false} fontSize={10} width={38} />
               <ReferenceLine y={kcalGoal} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Line dataKey="value" name="kcal" type="monotone" stroke="var(--color-kcal)" strokeWidth={2} dot={false} />
             </LineChart>
           </ChartContainer>
         </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="text-[11px] text-muted-foreground mb-1.5">WEIGHT TREND</div>
+        <ChartContainer config={weightChartConfig} className="h-[180px] w-full aspect-auto">
+          <LineChart data={weightSeries} margin={{ top: 5, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tickLine={false} axisLine={false} fontSize={10} interval="preserveStartEnd" />
+            <YAxis tickLine={false} axisLine={false} fontSize={10} width={40} domain={["dataMin - 1", "dataMax + 1"]} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Line dataKey="value" name="weight" type="monotone" stroke="var(--color-weight)" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ChartContainer>
       </div>
     </div>
   );
