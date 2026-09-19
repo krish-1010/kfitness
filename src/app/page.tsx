@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Body from "react-muscle-highlighter";
+import { BodyChart, ViewSide, type BodyState } from "body-muscles";
 import { PROTEIN_GOAL, KCAL_GOAL } from "@/lib/constants";
 import { muscleGroupsToBodyData } from "@/lib/muscleSlug";
+import { muscleGroupsToBodyMusclesState, muscleGroupsToFullBodyMusclesState } from "@/lib/muscleBodyMuscles";
 import { MUSCLE_TAXONOMY } from "@/lib/muscleTaxonomy";
+
+// Which body-diagram library is actually rendered. Both adapters
+// (muscleSlug.ts for react-muscle-highlighter, muscleBodyMuscles.ts for
+// body-muscles) are kept complete and independent, so falling back is this
+// one line — nothing else in the app references either library directly
+// except the MuscleBodyView component below.
+const MUSCLE_DIAGRAM_BACKEND: "body-muscles" | "react-muscle-highlighter" = "body-muscles";
 
 // Formats a Date using its LOCAL calendar fields, never toISOString() (which
 // converts to UTC first). In any positive-UTC-offset timezone like IST,
@@ -147,6 +156,76 @@ function MuscleBadge({ muscleGroup, onClick, linkCount }: { muscleGroup: string;
   );
 }
 
+// Renders one body-muscles view (front or back) into a plain div — the
+// library exposes an imperative BodyChart class, not a React component, so
+// this wraps it the way body-muscles' own docs recommend (useRef + useEffect,
+// destroying on unmount, update()-ing in place when bodyState changes
+// without tearing down and rebuilding the SVG).
+function BodyMusclesPane({ side, bodyState, size }: { side: "front" | "back"; bodyState: BodyState; size: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<BodyChart | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    chartRef.current = new BodyChart(containerRef.current, {
+      view: side === "front" ? ViewSide.FRONT : ViewSide.BACK,
+      bodyState,
+      enableTransitions: true,
+    });
+    return () => chartRef.current?.destroy();
+    // Only (re)build on side change — bodyState updates go through the
+    // effect below via .update() so the SVG isn't torn down every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [side]);
+
+  useEffect(() => {
+    chartRef.current?.update({ bodyState });
+  }, [bodyState]);
+
+  return <div ref={containerRef} style={{ width: size, height: size * 1.5 }} />;
+}
+
+// Single entry point for both call sites below (MuscleDiagram's multi-
+// exercise heat map and ExerciseDetailModal's single-exercise highlight) —
+// switches on MUSCLE_DIAGRAM_BACKEND so falling back to
+// react-muscle-highlighter never touches either call site, just this
+// function. `full` mirrors the old "single exercise at max intensity"
+// behavior; without it, intensity is counted across muscleGroups (more
+// exercises hitting a region = a hotter color).
+function MuscleBodyView({ muscleGroups, full, size = 130 }: { muscleGroups: string[]; full?: boolean; size?: number }) {
+  if (MUSCLE_DIAGRAM_BACKEND === "body-muscles") {
+    const bodyState = full ? muscleGroupsToFullBodyMusclesState(muscleGroups) : muscleGroupsToBodyMusclesState(muscleGroups);
+    if (Object.keys(bodyState).length === 0) return null;
+    return (
+      <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+        <BodyMusclesPane side="front" bodyState={bodyState} size={size} />
+        <BodyMusclesPane side="back" bodyState={bodyState} size={size} />
+      </div>
+    );
+  }
+
+  const data = full ? muscleGroupsToBodyData(muscleGroups).map((d) => ({ ...d, intensity: 3 })) : muscleGroupsToBodyData(muscleGroups);
+  if (data.length === 0) return null;
+  const scale = size / 240;
+  return (
+    <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+      <Body data={data} side="front" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
+      <Body data={data} side="back" gender="male" scale={scale} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
+    </div>
+  );
+}
+
+// Whether either backend actually has anything to draw for these
+// muscleGroups — used to decide whether to show the diagram toggle at all
+// (e.g. a day of only "Full Body · Conditioning" exercises has nothing
+// mappable in either adapter).
+function hasMuscleDiagramData(muscleGroups: string[]): boolean {
+  if (MUSCLE_DIAGRAM_BACKEND === "body-muscles") {
+    return Object.keys(muscleGroupsToBodyMusclesState(muscleGroups)).length > 0;
+  }
+  return muscleGroupsToBodyData(muscleGroups).length > 0;
+}
+
 type DetailTarget = { id: number; name: string; muscleGroup: string; manage: boolean };
 
 // Clicking an exercise's muscle badge anywhere opens this: a clear, single
@@ -182,10 +261,6 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
     setNewUrl("");
   };
 
-  // Full intensity on the single target region — this is "where does THIS
-  // exercise hit", not a multi-exercise heat map, so there's only one level.
-  const data = muscleGroupsToBodyData([target.muscleGroup]).map((d) => ({ ...d, intensity: 3 }));
-
   return (
     <div
       onClick={onClose}
@@ -203,12 +278,9 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
         </div>
         <MuscleBadge muscleGroup={target.muscleGroup} />
 
-        {data.length > 0 && (
-          <div style={{ display: "flex", justifyContent: "center", gap: 12, margin: "14px 0" }}>
-            <Body data={data} side="front" gender="male" scale={0.55} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
-            <Body data={data} side="back" gender="male" scale={0.55} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg} border={line} />
-          </div>
-        )}
+        <div style={{ margin: "14px 0" }}>
+          <MuscleBodyView muscleGroups={[target.muscleGroup]} full size={140} />
+        </div>
 
         <div style={{ fontSize: 11, color: inkDim, marginBottom: 6, letterSpacing: 0.3 }}>TUTORIAL LINKS</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: target.manage ? 10 : 0 }}>
@@ -255,8 +327,7 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
 // today's exercises (logged + suggested) actually cover.
 function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
   const [shown, setShown] = useState(false);
-  const data = muscleGroupsToBodyData(muscleGroups);
-  if (data.length === 0) return null;
+  if (!hasMuscleDiagramData(muscleGroups)) return null;
 
   return (
     <div style={{ marginBottom: 10 }}>
@@ -267,9 +338,8 @@ function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
         {shown ? "Hide" : "👁 Muscles worked today"}
       </button>
       {shown && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 8 }}>
-          <Body data={data} side="front" gender="male" scale={0.32} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg2} border={line} />
-          <Body data={data} side="back" gender="male" scale={0.32} colors={["#4a3b21", "#8a6a2f", amber]} defaultFill={bg2} border={line} />
+        <div style={{ marginTop: 8 }}>
+          <MuscleBodyView muscleGroups={muscleGroups} size={80} />
         </div>
       )}
     </div>
