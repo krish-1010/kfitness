@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { workoutSessions, exerciseLog, exercises } from "@/lib/schema";
-import { resolveDayType, resolveVariant } from "@/lib/rotation";
+import { workoutSessions, exerciseLog, exercises, planDays } from "@/lib/schema";
+import { resolveDayType, resolveVariant, type ResolvedDay } from "@/lib/rotation";
 import { getLinkCounts } from "@/lib/exerciseLinks";
 import { getSetsByLogId } from "@/lib/exerciseSetLog";
 import { getCurrentUserId } from "@/lib/auth";
@@ -14,22 +14,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "date query param required" }, { status: 400 });
   }
 
-  // A previewDayType lets the UI show what another day type would look like
+  // previewPlanDayId lets the UI show what another plan day would look like
   // (exercise list, strength/hypertrophy variant) WITHOUT writing anything —
   // browsing "what would Legs look like today" must never silently commit
   // today as a Legs day. Only an explicit action (logging an exercise,
-  // marking the day done/rest) writes a row, via POST below.
-  const previewDayType = req.nextUrl.searchParams.get("previewDayType") as
-    | "Push"
-    | "Pull"
-    | "Legs"
-    | "Rest"
-    | null;
+  // marking the day done/rest) writes a row, via POST below. The literal
+  // "rest" previews a rest day; a numeric id previews that plan_day.
+  const previewParam = req.nextUrl.searchParams.get("previewPlanDayId");
 
-  const session = previewDayType
-    ? { dayType: previewDayType, status: "planned", suggested: true }
-    : await resolveDayType(userId, date);
-  const variant = session.dayType === "Rest" ? null : await resolveVariant(userId, session.dayType, date);
+  let session: ResolvedDay;
+  if (previewParam === "rest") {
+    session = { planDayId: null, label: "Rest", variantMode: "none", status: "planned", suggested: true };
+  } else if (previewParam) {
+    const previewId = Number(previewParam);
+    const [day] = await db.select().from(planDays).where(eq(planDays.id, previewId));
+    session = day
+      ? { planDayId: day.id, label: day.label, variantMode: day.variantMode as "none" | "strength_hypertrophy", status: "planned", suggested: true }
+      : await resolveDayType(userId, date);
+  } else {
+    session = await resolveDayType(userId, date);
+  }
+
+  const variant = session.planDayId === null ? null : await resolveVariant(userId, session.planDayId, date);
 
   const log = await db
     .select({
@@ -61,15 +67,16 @@ export async function GET(req: NextRequest) {
 }
 
 // Commits a session row: marks it done/rest/skipped, or overrides the
-// suggested day type (e.g. training Push/Pull/Legs on a suggested Rest day).
+// suggested plan day (e.g. training on a suggested Rest day). planDayId
+// null means Rest.
 export async function POST(req: NextRequest) {
   const userId = getCurrentUserId(req);
   const body = await req.json();
-  const { date, dayType, status, isManualOverride } = body ?? {};
+  const { date, planDayId, status, isManualOverride } = body ?? {};
 
-  if (!date || !dayType || !["Push", "Pull", "Legs", "Rest"].includes(dayType)) {
+  if (!date || (planDayId !== null && typeof planDayId !== "number")) {
     return NextResponse.json(
-      { error: "date and dayType (Push/Pull/Legs/Rest) are required" },
+      { error: "date and planDayId (number or null for Rest) are required" },
       { status: 400 }
     );
   }
@@ -85,13 +92,13 @@ export async function POST(req: NextRequest) {
   if (existing.length > 0) {
     await db
       .update(workoutSessions)
-      .set({ dayType, status, isManualOverride: !!isManualOverride })
+      .set({ planDayId, status, isManualOverride: !!isManualOverride })
       .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date)));
   } else {
     await db.insert(workoutSessions).values({
       userId,
       date,
-      dayType,
+      planDayId,
       status,
       isManualOverride: !!isManualOverride,
     });

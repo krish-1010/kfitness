@@ -61,27 +61,62 @@ async function run() {
   }
   console.log(`Copied ${templateSupplements.length} supplements from user ${templateUserId}`);
 
-  const templateExercises = await db
+  // Copy the template's active plan structure (plan_days), then the
+  // exercises mapped onto it — exercises reference planDayId, so the new
+  // user needs their own plan_days rows before exercises can be copied.
+  const [templatePlan] = await db
     .select()
-    .from(schema.exercises)
-    .where(and(eq(schema.exercises.userId, templateUserId), eq(schema.exercises.archived, false)));
-  if (templateExercises.length > 0) {
-    await db.insert(schema.exercises).values(
-      templateExercises.map((e) => ({
-        userId: user!.id,
-        name: e.name,
-        dayType: e.dayType,
-        defaultSets: e.defaultSets,
-        defaultReps: e.defaultReps,
-        restSeconds: e.restSeconds,
-        variant: e.variant,
-        block: e.block,
-        muscleGroup: e.muscleGroup,
-        trackingType: e.trackingType,
-      }))
-    );
+    .from(schema.workoutPlans)
+    .where(and(eq(schema.workoutPlans.userId, templateUserId), eq(schema.workoutPlans.isActive, true), eq(schema.workoutPlans.archived, false)));
+
+  if (!templatePlan) {
+    console.log(`Template user ${templateUserId} has no active plan -- skipping plan/exercise copy. Create a plan for the new user manually.`);
+  } else {
+    const [newPlan] = await db
+      .insert(schema.workoutPlans)
+      .values({ userId: user!.id, name: templatePlan.name, isActive: true, fixedRestWeekday: templatePlan.fixedRestWeekday })
+      .returning();
+    console.log(`Created plan id=${newPlan!.id} (${newPlan!.name})`);
+
+    const templateDays = await db
+      .select()
+      .from(schema.planDays)
+      .where(eq(schema.planDays.planId, templatePlan.id))
+      .orderBy(schema.planDays.dayIndex);
+
+    const oldToNewDayId: Record<number, number> = {};
+    for (const day of templateDays) {
+      const [newDay] = await db
+        .insert(schema.planDays)
+        .values({ planId: newPlan!.id, dayIndex: day.dayIndex, label: day.label, variantMode: day.variantMode })
+        .returning();
+      oldToNewDayId[day.id] = newDay!.id;
+    }
+    console.log(`Copied ${templateDays.length} plan days`);
+
+    const templateExercises = await db
+      .select()
+      .from(schema.exercises)
+      .where(and(eq(schema.exercises.userId, templateUserId), eq(schema.exercises.archived, false)));
+    if (templateExercises.length > 0) {
+      await db.insert(schema.exercises).values(
+        templateExercises.map((e) => ({
+          userId: user!.id,
+          name: e.name,
+          planDayId: oldToNewDayId[e.planDayId]!,
+          defaultSets: e.defaultSets,
+          defaultReps: e.defaultReps,
+          restSeconds: e.restSeconds,
+          variant: e.variant,
+          block: e.block,
+          muscleGroup: e.muscleGroup,
+          trackingType: e.trackingType,
+        }))
+      );
+    }
+    console.log(`Copied ${templateExercises.length} exercises from user ${templateUserId}`);
   }
-  console.log(`Copied ${templateExercises.length} exercises from user ${templateUserId}`);
+
   console.log(
     "\nNote: tutorial links on the template's exercises were not copied (they'd need remapping to the new exercise ids) -- add them fresh via the app's manage panel if needed."
   );

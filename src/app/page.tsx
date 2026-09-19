@@ -20,14 +20,7 @@ const TODAY = () => toLocalDateStr(new Date());
 
 const WATER_PRESETS = [500, 650, 850] as const;
 
-const PROGRAM_SECTIONS: [string, string, string][] = [
-  ["Push", "strength", "Push · Strength"],
-  ["Pull", "strength", "Pull · Strength"],
-  ["Legs", "strength", "Legs · Strength"],
-  ["Push", "hypertrophy", "Push · Hypertrophy"],
-  ["Pull", "hypertrophy", "Pull · Hypertrophy"],
-  ["Legs", "hypertrophy", "Legs · Hypertrophy"],
-];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 type LogItem = { id: number; name: string; protein: number; kcal: number };
 type DayLog = { items: LogItem[]; supplements: Record<string, boolean> };
@@ -36,10 +29,13 @@ type WaterEntry = { id: number; date: string; amountMl: number; createdAt: strin
 type Food = { id: number; name: string; protein: number; kcal: number; archived: boolean };
 type Supplement = { id: number; name: string; time: string; archived: boolean };
 type TrackingType = "reps_weight" | "duration_distance";
+type VariantMode = "none" | "strength_hypertrophy";
+type PlanDay = { id: number; planId: number; dayIndex: number; label: string; variantMode: VariantMode };
+type Plan = { id: number; name: string; isActive: boolean; fixedRestWeekday: number | null };
 type Exercise = {
   id: number;
   name: string;
-  dayType: string;
+  planDayId: number;
   defaultSets: number;
   defaultReps: string;
   restSeconds: number | null;
@@ -75,10 +71,11 @@ type ExerciseLogRow = {
   sets: SetRow[];
 };
 type ExerciseLink = { id: number; label: string; url: string };
-type DayType = "Push" | "Pull" | "Legs" | "Rest";
 type Variant = "strength" | "hypertrophy" | null;
 type WorkoutState = {
-  dayType: DayType;
+  planDayId: number | null; // null = Rest
+  label: string;
+  variantMode: VariantMode;
   status: string;
   suggested: boolean;
   variant: Variant;
@@ -306,11 +303,15 @@ export default function App() {
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [exerciseOptions, setExerciseOptions] = useState<Exercise[]>([]);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
+  const [planDaysList, setPlanDaysList] = useState<PlanDay[]>([]);
   const [workout, setWorkout] = useState<WorkoutState>({
-    dayType: "Push",
+    planDayId: null,
+    label: "",
+    variantMode: "none",
     status: "planned",
     suggested: true,
-    variant: "strength",
+    variant: null,
     log: [],
   });
 
@@ -339,14 +340,15 @@ export default function App() {
   const [editingExId, setEditingExId] = useState<number | null>(null);
   const [exEdit, setExEdit] = useState({
     name: "",
-    dayType: "Push",
+    planDayId: null as number | null,
     defaultSets: "3",
     defaultReps: "8-12",
     muscleGroup: "",
     trackingType: "reps_weight" as TrackingType,
   });
   const [exerciseQuery, setExerciseQuery] = useState("");
-  const [expandedDayTypes, setExpandedDayTypes] = useState<Set<string>>(new Set());
+  const [expandedPlanDays, setExpandedPlanDays] = useState<Set<number>>(new Set());
+  const [showManagePlans, setShowManagePlans] = useState(false);
   const [detailTarget, setDetailTarget] = useState<DetailTarget | null>(null);
 
   const [weightInput, setWeightInput] = useState("");
@@ -378,15 +380,15 @@ export default function App() {
     setSupplements(await res.json());
   }, []);
 
-  const loadWorkout = useCallback(async (d: string, previewDayType?: DayType) => {
-    const url = previewDayType
-      ? `/api/workout?date=${d}&previewDayType=${previewDayType}`
-      : `/api/workout?date=${d}`;
+  const loadWorkout = useCallback(async (d: string, previewPlanDayId?: number | "rest") => {
+    const url =
+      previewPlanDayId !== undefined ? `/api/workout?date=${d}&previewPlanDayId=${previewPlanDayId}` : `/api/workout?date=${d}`;
     const res = await fetch(url);
     const data: WorkoutState = await res.json();
     setWorkout(data);
-    if (data.dayType !== "Rest" && data.variant) {
-      const exRes = await fetch(`/api/exercises?dayType=${data.dayType}&variant=${data.variant}`);
+    if (data.planDayId !== null) {
+      const variantParam = data.variant ? `&variant=${data.variant}` : "";
+      const exRes = await fetch(`/api/exercises?planDayId=${data.planDayId}${variantParam}`);
       setExerciseOptions(await exRes.json());
     } else {
       setExerciseOptions([]);
@@ -396,6 +398,13 @@ export default function App() {
   const loadAllExercises = useCallback(async () => {
     const res = await fetch("/api/exercises");
     setAllExercises(await res.json());
+  }, []);
+
+  const loadPlan = useCallback(async () => {
+    const res = await fetch("/api/plan");
+    const data: { plan: Plan | null; days: PlanDay[] } = await res.json();
+    setActivePlan(data.plan);
+    setPlanDaysList(data.days);
   }, []);
 
   const loadWater = useCallback(async (d: string) => {
@@ -411,6 +420,11 @@ export default function App() {
       () => setLoading(false)
     );
   }, [date, loadLog, loadWeights, loadFoods, loadWorkout, loadWater, loadSupplements]);
+
+  // The active plan (day labels, cycle order) is not date-scoped, loads once.
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
 
   // Water target is a global setting, not date-scoped, so it loads once.
   useEffect(() => {
@@ -582,27 +596,27 @@ export default function App() {
   };
 
   // ---- Workout / exercise ----
-  const commitSession = async (dayType: DayType, status: string, isManualOverride = false) => {
+  const commitSession = async (planDayId: number | null, status: string, isManualOverride = false) => {
     await fetch("/api/workout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, dayType, status, isManualOverride }),
+      body: JSON.stringify({ date, planDayId, status, isManualOverride }),
     });
     await loadWorkout(date);
   };
 
   const addExerciseToLog = async (ex: Exercise) => {
-    // The day type shown might still be an unsaved preview (browsing "what
+    // The plan day shown might still be an unsaved preview (browsing "what
     // would Legs look like today" via the dropdown never writes anything —
-    // see the previewDayType handling in loadWorkout / /api/workout). The
+    // see the previewPlanDayId handling in loadWorkout / /api/workout). The
     // moment you actually log an exercise against it, that's a real
     // decision, so commit it as this date's official (possibly overridden)
-    // day type before writing the log row.
+    // plan day before writing the log row.
     if (workout.suggested) {
       await fetch("/api/workout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, dayType: workout.dayType, status: "planned", isManualOverride: true }),
+        body: JSON.stringify({ date, planDayId: workout.planDayId, status: "planned", isManualOverride: true }),
       });
       setWorkout((prev) => ({ ...prev, suggested: false }));
     }
@@ -677,13 +691,13 @@ export default function App() {
   };
 
   const addCustomExercise = async () => {
-    if (!customExName.trim() || workout.dayType === "Rest") return;
+    if (!customExName.trim() || workout.planDayId === null) return;
     const res = await fetch("/api/exercises", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: customExName.trim(),
-        dayType: workout.dayType,
+        planDayId: workout.planDayId,
         defaultSets: parseInt(customExSets) || 3,
         defaultReps: customExReps || "8-12",
       }),
@@ -701,7 +715,7 @@ export default function App() {
     setEditingExId(ex.id);
     setExEdit({
       name: ex.name,
-      dayType: ex.dayType,
+      planDayId: ex.planDayId,
       defaultSets: String(ex.defaultSets),
       defaultReps: ex.defaultReps,
       muscleGroup: ex.muscleGroup,
@@ -715,7 +729,7 @@ export default function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: exEdit.name,
-        dayType: exEdit.dayType,
+        planDayId: exEdit.planDayId,
         defaultSets: parseInt(exEdit.defaultSets) || 3,
         defaultReps: exEdit.defaultReps,
         muscleGroup: exEdit.muscleGroup,
@@ -778,13 +792,12 @@ export default function App() {
     );
   }
 
-  const dayTypeColor = workout.dayType === "Rest" ? inkDim : amber;
   const exDoneCount = workout.log.filter((r) => r.done).length;
 
   // Manage-exercise-library rows: a search flattens everything into a plain
-  // filtered list; with no query, group into collapsible Push/Pull/Legs
-  // sections instead — the library's long enough now (48 exercises) that
-  // showing it all flat was the actual complaint.
+  // filtered list; with no query, group into collapsible per-plan-day
+  // sections instead — the library's long enough now that showing it all
+  // flat was the actual complaint.
   const filteredFoods = foodQuery.trim()
     ? foods.filter((f) => f.name.toLowerCase().includes(foodQuery.trim().toLowerCase()))
     : foods;
@@ -794,22 +807,34 @@ export default function App() {
   const pagedFoods = filteredFoods.slice(clampedFoodPage * FOOD_PAGE_SIZE, (clampedFoodPage + 1) * FOOD_PAGE_SIZE);
 
   const exerciseSearchActive = exerciseQuery.trim().length > 0;
-  const manageExerciseRows: ({ type: "header"; key: string; label: string } | { type: "exercise"; ex: Exercise })[] = [];
+  const manageExerciseRows: ({ type: "header"; key: number; label: string } | { type: "exercise"; ex: Exercise })[] = [];
   if (exerciseSearchActive) {
     const q = exerciseQuery.trim().toLowerCase();
     allExercises
       .filter((ex) => ex.name.toLowerCase().includes(q) || ex.muscleGroup.toLowerCase().includes(q))
       .forEach((ex) => manageExerciseRows.push({ type: "exercise", ex }));
   } else {
-    (["Push", "Pull", "Legs"] as const).forEach((dt) => {
-      const group = allExercises.filter((ex) => ex.dayType === dt);
+    planDaysList.forEach((pd) => {
+      const group = allExercises.filter((ex) => ex.planDayId === pd.id);
       if (group.length === 0) return;
-      manageExerciseRows.push({ type: "header", key: dt, label: `${dt} (${group.length})` });
-      if (expandedDayTypes.has(dt)) {
+      manageExerciseRows.push({ type: "header", key: pd.id, label: `${pd.label} (${group.length})` });
+      if (expandedPlanDays.has(pd.id)) {
         group.forEach((ex) => manageExerciseRows.push({ type: "exercise", ex }));
       }
     });
   }
+
+  const planDayById: Record<number, PlanDay> = Object.fromEntries(planDaysList.map((d) => [d.id, d]));
+
+  type ProgramSection = { planDayId: number; variant: "strength" | "hypertrophy" | null; label: string };
+  const programSections: ProgramSection[] = planDaysList.flatMap((day): ProgramSection[] =>
+    day.variantMode === "strength_hypertrophy"
+      ? [
+          { planDayId: day.id, variant: "strength", label: `${day.label} · Strength` },
+          { planDayId: day.id, variant: "hypertrophy", label: `${day.label} · Hypertrophy` },
+        ]
+      : [{ planDayId: day.id, variant: null, label: day.label }]
+  );
 
   return (
     <div style={{ minHeight: "100vh", padding: "24px 16px" }}>
@@ -845,18 +870,18 @@ export default function App() {
         {/* ---- Workout / exercise section ---- */}
         <div
           style={{
-            background: workout.dayType === "Rest" ? bg2 : `linear-gradient(135deg, ${bg2}, ${bg})`,
-            border: `1px solid ${workout.dayType === "Rest" ? line : amber + "55"}`,
+            background: workout.planDayId === null ? bg2 : `linear-gradient(135deg, ${bg2}, ${bg})`,
+            border: `1px solid ${workout.planDayId === null ? line : amber + "55"}`,
             padding: "14px 16px",
             marginBottom: 12,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: workout.dayType !== "Rest" ? 12 : 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: workout.planDayId !== null ? 12 : 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 20 }}>{workout.dayType === "Rest" ? "💤" : "🏋️"}</div>
+              <div style={{ fontSize: 20 }}>{workout.planDayId === null ? "💤" : "🏋️"}</div>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>
-                  {workout.dayType === "Rest" ? "Rest day" : `${workout.dayType} day`}
+                  {workout.planDayId === null ? "Rest day" : `${workout.label} day`}
                   {workout.variant && (
                     <span style={{ fontSize: 11, color: amber, fontWeight: 400 }}>
                       {" "}
@@ -867,7 +892,7 @@ export default function App() {
                   {workout.status === "done" && <span style={{ fontSize: 11, color: green, fontWeight: 400 }}> · done</span>}
                   {workout.status === "skipped" && <span style={{ fontSize: 11, color: red, fontWeight: 400 }}> · skipped</span>}
                 </div>
-                {workout.dayType !== "Rest" && (
+                {workout.planDayId !== null && (
                   <div style={{ fontSize: 12, color: inkDim }}>
                     {exDoneCount}/{workout.log.length || 0} exercises done
                   </div>
@@ -875,18 +900,23 @@ export default function App() {
               </div>
             </div>
             <select
-              value={workout.dayType}
-              onChange={(e) => loadWorkout(date, e.target.value as DayType)}
+              value={workout.planDayId === null ? "rest" : String(workout.planDayId)}
+              onChange={(e) => {
+                const v = e.target.value;
+                loadWorkout(date, v === "rest" ? "rest" : Number(v));
+              }}
               style={{ ...smallInputStyle, width: "auto" }}
             >
-              <option value="Push">Push</option>
-              <option value="Pull">Pull</option>
-              <option value="Legs">Legs</option>
-              <option value="Rest">Rest</option>
+              {planDaysList.map((day) => (
+                <option key={day.id} value={String(day.id)}>
+                  {day.label}
+                </option>
+              ))}
+              <option value="rest">Rest</option>
             </select>
           </div>
 
-          {workout.dayType !== "Rest" && (
+          {workout.planDayId !== null && (
             <>
               {workout.log.length > 0 && (
                 <div style={{ border: `1px solid ${line}`, marginBottom: 10 }}>
@@ -1048,7 +1078,7 @@ export default function App() {
                   <button onClick={() => setShowCustomExercise(true)} style={{ ...secondaryBtn, flex: 1 }}>
                     + Custom exercise
                   </button>
-                  <button onClick={() => commitSession(workout.dayType, "done")} style={primaryBtn}>
+                  <button onClick={() => commitSession(workout.planDayId, "done")} style={primaryBtn}>
                     Mark day done
                   </button>
                 </div>
@@ -1072,8 +1102,8 @@ export default function App() {
             </>
           )}
 
-          {workout.dayType === "Rest" && workout.status !== "rest" && (
-            <button onClick={() => commitSession("Rest", "rest", true)} style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}>
+          {workout.planDayId === null && workout.status !== "rest" && (
+            <button onClick={() => commitSession(null, "rest", true)} style={{ ...secondaryBtn, marginTop: 10, width: "100%" }}>
               Confirm rest day
             </button>
           )}
@@ -1103,9 +1133,11 @@ export default function App() {
 
         {showFullProgram &&
           (() => {
-            const [dt, v, label] = PROGRAM_SECTIONS[programPage]!;
+            const section = programSections[programPage];
+            if (!section) return null;
+            const { planDayId, variant: v, label } = section;
             const sessionExercises = allExercises
-              .filter((ex) => !ex.archived && ex.dayType === dt && (ex.variant === v || ex.variant === "standard"))
+              .filter((ex) => !ex.archived && ex.planDayId === planDayId && (v === null || ex.variant === v || ex.variant === "standard"))
               .sort((a, b) => {
                 const order: Record<string, number> = { main: 0, core: 1, conditioning: 2 };
                 return (order[a.block] ?? 0) - (order[b.block] ?? 0);
@@ -1136,11 +1168,11 @@ export default function App() {
                       ‹
                     </button>
                     <div style={{ fontSize: 12, color: inkDim }}>
-                      {programPage + 1} / {PROGRAM_SECTIONS.length}
+                      {programPage + 1} / {programSections.length}
                     </div>
                     <button
-                      onClick={() => setProgramPage((p) => Math.min(PROGRAM_SECTIONS.length - 1, p + 1))}
-                      disabled={programPage === PROGRAM_SECTIONS.length - 1}
+                      onClick={() => setProgramPage((p) => Math.min(programSections.length - 1, p + 1))}
+                      disabled={programPage === programSections.length - 1}
                       style={navBtn}
                     >
                       ›
@@ -1202,12 +1234,12 @@ export default function App() {
               <div style={{ border: `1px solid ${line}` }}>
                 {manageExerciseRows.map((row, idx) => {
                   if (row.type === "header") {
-                    const expanded = expandedDayTypes.has(row.key);
+                    const expanded = expandedPlanDays.has(row.key);
                     return (
                       <button
                         key={row.key}
                         onClick={() =>
-                          setExpandedDayTypes((prev) => {
+                          setExpandedPlanDays((prev) => {
                             const next = new Set(prev);
                             if (next.has(row.key)) next.delete(row.key);
                             else next.add(row.key);
@@ -1245,13 +1277,15 @@ export default function App() {
                       <input value={exEdit.name} onChange={(e) => setExEdit({ ...exEdit, name: e.target.value })} style={smallInputStyle} />
                       <div style={{ display: "flex", gap: 6 }}>
                         <select
-                          value={exEdit.dayType}
-                          onChange={(e) => setExEdit({ ...exEdit, dayType: e.target.value })}
+                          value={exEdit.planDayId === null ? "" : String(exEdit.planDayId)}
+                          onChange={(e) => setExEdit({ ...exEdit, planDayId: Number(e.target.value) })}
                           style={smallInputStyle}
                         >
-                          <option value="Push">Push</option>
-                          <option value="Pull">Pull</option>
-                          <option value="Legs">Legs</option>
+                          {planDaysList.map((day) => (
+                            <option key={day.id} value={String(day.id)}>
+                              {day.label}
+                            </option>
+                          ))}
                         </select>
                         <input
                           value={exEdit.defaultSets}
@@ -1290,7 +1324,7 @@ export default function App() {
                   ) : (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {ex.name} <span style={{ color: inkDim }}>· {ex.dayType} · {ex.defaultSets}×{ex.defaultReps}</span>
+                        {ex.name} <span style={{ color: inkDim }}>· {planDayById[ex.planDayId]?.label ?? "?"} · {ex.defaultSets}×{ex.defaultReps}</span>
                         <MuscleBadge
                           muscleGroup={ex.muscleGroup}
                           linkCount={ex.linkCount}

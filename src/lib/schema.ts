@@ -75,20 +75,59 @@ export const weights = pgTable(
   })
 );
 
+// A user's training split, e.g. "PPL" or "5-Day Upper/Lower/etc". A user
+// can have several (a cut split and a bulk split, say); exactly one is
+// `isActive` at a time, which is what the app actually cycles through day
+// to day. `fixedRestWeekday` (0=Sunday..6=Saturday) replaces the old
+// hardcoded "Sunday defaults to Rest" rule — now per-plan, since a 5-day
+// plan might want that too, or might want pure continuous cycling with no
+// calendar anchor at all (null).
+export const workoutPlans = pgTable("workout_plans", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  isActive: boolean("is_active").notNull().default(false),
+  fixedRestWeekday: integer("fixed_rest_weekday"),
+  archived: boolean("archived").notNull().default(false),
+});
+
+// One row per day-slot in a plan's cycle, in `dayIndex` order (0-based).
+// `label` is free text ("Push", "Day 1", "Chest + Shoulders") — this is
+// what makes the split arbitrary instead of hardcoded to PPL.
+// `variantMode`: 'none' cycles through this day once per lap with no
+// alternation; 'strength_hypertrophy' alternates two passes each time this
+// slot comes up (the PPL x2 pattern), same skip-tolerant mechanism as
+// before, just generalized off dayIndex instead of a fixed 3-array.
+export const planDays = pgTable(
+  "plan_days",
+  {
+    id: serial("id").primaryKey(),
+    planId: integer("plan_id").notNull(),
+    dayIndex: integer("day_index").notNull(),
+    label: text("label").notNull(),
+    variantMode: text("variant_mode").notNull().default("none"),
+  },
+  (t) => ({
+    planDayIndexUnique: unique().on(t.planId, t.dayIndex),
+  })
+);
+
 // User-editable exercise library. Each user gets their own private copy,
 // seeded from the same defaults, on account creation.
 export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   name: text("name").notNull(),
-  dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs'
+  planDayId: integer("plan_day_id").notNull(),
   defaultSets: integer("default_sets").notNull().default(3),
   defaultReps: text("default_reps").notNull().default("8-12"),
   restSeconds: integer("rest_seconds"),
-  // 'strength' | 'hypertrophy' — which weekly pass this belongs to, for
-  // PPL x2 alternation. 'standard' means it shows on every session for its
-  // dayType regardless of which pass is active (used for core/conditioning
-  // add-ons that aren't part of the strength/hypertrophy alternation).
+  // 'strength' | 'hypertrophy' — which pass this belongs to, only relevant
+  // when the parent plan_day's variantMode is 'strength_hypertrophy'.
+  // 'standard' means it shows on every session for its plan_day regardless
+  // of which pass is active (core/conditioning add-ons that aren't part of
+  // the alternation) — also the only meaningful value for a plan_day whose
+  // variantMode is 'none'.
   variant: text("variant").notNull().default("standard"),
   // 'main' | 'core' | 'conditioning' — groups exercises within a session
   // for display, independent of the strength/hypertrophy variant.
@@ -113,16 +152,19 @@ export const exerciseLinks = pgTable("exercise_links", {
   url: text("url").notNull(),
 });
 
-// One row per (user, date) once a day type is decided (suggested or
+// One row per (user, date) once a plan day is decided (suggested or
 // overridden) or a session is completed/skipped/rested. Absence of a row
 // means "not decided yet" — the frontend computes a suggestion in that case.
+// planDayId null means Rest; a non-null value identifies which plan_days
+// row (and therefore which plan) that date was trained under, so switching
+// active plans later never breaks the meaning of past sessions.
 export const workoutSessions = pgTable(
   "workout_sessions",
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull(),
     date: text("date").notNull(),
-    dayType: text("day_type").notNull(), // 'Push' | 'Pull' | 'Legs' | 'Rest'
+    planDayId: integer("plan_day_id"),
     status: text("status").notNull().default("planned"), // 'planned' | 'done' | 'skipped' | 'rest'
     isManualOverride: boolean("is_manual_override").notNull().default(false),
   },

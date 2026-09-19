@@ -8,8 +8,6 @@
     "start": "next start",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx scripts/seed.ts",
-    "db:seed-ppl": "tsx scripts/seed-ppl-program.ts",
     "db:seed-supplements": "tsx scripts/seed-supplements.ts",
     "create-user": "tsx scripts/create-user.ts"
   },

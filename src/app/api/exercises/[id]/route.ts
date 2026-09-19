@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { exercises } from "@/lib/schema";
+import { exercises, planDays, workoutPlans } from "@/lib/schema";
 import { getCurrentUserId } from "@/lib/auth";
+
+async function ownsPlanDay(userId: number, planDayId: number): Promise<boolean> {
+  const [row] = await db
+    .select({ id: planDays.id })
+    .from(planDays)
+    .innerJoin(workoutPlans, eq(planDays.planId, workoutPlans.id))
+    .where(and(eq(planDays.id, planDayId), eq(workoutPlans.userId, userId)));
+  return !!row;
+}
 
 export async function PATCH(
   req: NextRequest,
@@ -16,11 +25,15 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, dayType, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
+  const { name, planDayId, defaultSets, defaultReps, restSeconds, variant, block, muscleGroup, trackingType } = body ?? {};
+
+  if (typeof planDayId === "number" && !(await ownsPlanDay(userId, planDayId))) {
+    return NextResponse.json({ error: "invalid planDayId" }, { status: 400 });
+  }
 
   const patch: Partial<typeof exercises.$inferInsert> = {};
   if (typeof name === "string") patch.name = name;
-  if (dayType && ["Push", "Pull", "Legs"].includes(dayType)) patch.dayType = dayType;
+  if (typeof planDayId === "number") patch.planDayId = planDayId;
   if (typeof defaultSets === "number") patch.defaultSets = defaultSets;
   if (typeof defaultReps === "string") patch.defaultReps = defaultReps;
   if (typeof restSeconds === "number") patch.restSeconds = restSeconds;
