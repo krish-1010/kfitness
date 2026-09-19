@@ -24,7 +24,17 @@ Verification performed before pushing:
 - All test data written during smoke-testing (a logged set's reps/weight, a session's `status`, an exercise's `planDayId`) was reverted back to its original value afterward via API calls, since this was tested directly against the live production DB.
 - Post-push: hit `https://fitkr.vercel.app/api/workout?date=...` directly with a real session cookie → 200 OK with correct JSON (was an empty 500 before).
 
-**What's next:** the "Manage Plans UI" (letting a user actually create/switch/edit plans through the UI, rather than everyone being stuck on the one auto-created "PPL" plan) is still entirely unbuilt — see "Phase 3 sub-items not yet started" below. Ask the user whether to pick that up next, or move to something else; don't assume.
+## ✅ RESOLVED — Manage Plans UI built and deployed (2026-09-19, same day, next commit)
+
+Immediately after the outage fix, the user said "continue as per plan" — picking up the "what's next" item below (now historical). Built the frontend for the plan-management backend that already existed (all 5 `/api/plans*` routes were done in the outage-fix session but had zero UI). Committed as `8bc2bd8` ("feat: Manage Plans UI"), pushed, deployed (`dpl_9XeDnSdGLSCht4YnYSdYbRQiWsmY`, `READY`, aliased to `fitkr.vercel.app`), clean `get_runtime_errors` window since deploy.
+
+What it does: a new "Manage plans" button (next to "Manage exercise library" / "Full program table" in the workout card) opens a modal listing every plan with its days. Per plan: rename, activate (deactivates any other active plan), change fixed rest weekday, archive. Per day: rename, toggle `variantMode` (none / strength_hypertrophy), reorder via ▲/▼ (calls the days-reorder PATCH, which does the two-pass reindex server-side), add a day, delete a day (the backend's 409 "still has active exercises" is caught and shown inline via a `planActionError` state — this app has no other error-surfacing pattern anywhere, so this is new but scoped to just this modal). A "Create new plan" form at the bottom takes a name, a dynamic list of day-label inputs (add/remove rows), and an optional fixed rest weekday; per the backend's design a newly created plan is never auto-activated, so it shows up with an "Activate" button until the user is ready.
+
+New state added to `page.tsx`: `plansList`, `newPlanName`, `newPlanDayLabels`, `newPlanRestWeekday`, `editingPlanNameId`, `planNameEdit`, `editingDayId`, `dayLabelEdit`, `newDayLabelByPlan`, `planActionError`. New functions: `loadPlans`, `refreshAfterPlanChange` (refreshes `plansList` + `activePlan`/`planDaysList` + today's `workout` after every mutation — deliberately unconditional rather than checking "is this the active plan," since these are cheap GETs and it's a low-frequency admin surface), `createPlan`, `activatePlan`, `startEditPlanName`/`savePlanName`, `setPlanRestWeekday`, `archivePlan`, `addDayToPlan`, `startEditDay`/`saveDayLabel`, `setDayVariantMode`, `moveDay`, `removeDay`.
+
+Verified via `next build` + `next start` against the live Neon DB: created a real test plan ("Upper/Lower Test"), activated it and confirmed the day dropdown at the top of the app switched to its day labels, reactivated PPL, archived the test plan, renamed "Push" to "Push Test" and back, added a throwaway day and deleted it, hit the blocked-delete 409 by trying to delete "Push" (which has active exercises) and confirmed the inline error message appeared and nothing was deleted, reordered Push/Pull swapping positions and reverted it — then did a final `GET /api/plans` + `GET /api/workout` against the live DB (both locally and against `fitkr.vercel.app` itself post-deploy) to confirm the plan ended up in exactly its original state (PPL active, Push/Pull/Legs in original order, no leftover test plan).
+
+**What's next:** everything else under "Phase 3 sub-items not yet started" below (canonical muscle taxonomy, alternative exercises, exercise priority, custom-exercise form parity) or Phase 4/5 — ask the user, don't assume.
 
 ---
 
@@ -371,9 +381,9 @@ src/app/page.tsx(1306,73): error TS2339: Property 'dayType' does not exist on ty
 ```
 All of the above (everything except this HANDOFF.md itself) was committed as `7e88e79` ("fix: finish Phase 3 plan-builder rewrite in page.tsx, resolve outage") on top of `f6d64f1`, and pushed to `main`. This HANDOFF.md was committed separately right after, per the project's established convention of a dedicated handoff commit.
 
-### Phase 3 sub-items not yet started at all (lower priority than the compile-error fix above, do not start these until the outage is resolved)
+### Phase 3 sub-items not yet started at all
 
-- **Manage Plans UI** — the actual point of Phase 3 (letting a user create a new plan with custom day labels, switch their active plan, and add/rename/reorder/delete days) has **zero frontend UI** built yet. The `showManagePlans` boolean state exists but nothing reads it. All five backend routes for this (`/api/plans`, `/api/plans/[id]`, `/api/plans/[id]/days`, `/api/plans/[id]/days/[dayId]`) are fully built and typecheck clean, waiting for a UI to call them.
+- ~~**Manage Plans UI**~~ — **done, see "RESOLVED — Manage Plans UI" near the top of this document.**
 - **Canonical muscle taxonomy** — replacing the current free-text `muscleGroup` strings with a real researched list of proper muscle names (the user explicitly asked to "look for proper muscle names, build the list even more"; a draft list exists in the plan file at `C:\Users\krish\.claude\plans\1-i-should-be-foamy-engelbart.md` but hasn't been finalized or wired in).
 - **Exercise alternatives** — user explicitly asked for interchangeable-exercise groups (example given: Face Pulls ↔ Reverse Pec Deck Fly, as a fallback when a machine is unavailable). Planned schema: `exercises.alternativeGroupId` (nullable int; exercises sharing a group id are considered interchangeable), plus a "⇄ swap" affordance in the exercise-log UI. Not started.
 - **`exercises.priority`** (int, lower = do first) — for ordering a day's exercise list by fatigue-management logic (compounds before isolations). Not started.
@@ -392,14 +402,15 @@ All of the above (everything except this HANDOFF.md itself) was committed as `7e
 
 ## Immediate next step for a new session picking this up
 
-**Steps 1-7 below (the outage fix) are done as of 2026-09-19 — see "RESOLVED" at the top of this document.** Kept here as a record of the process that was followed, and because step 8 onward is still the actual next action.
+**Everything numbered below is done as of 2026-09-19** — the outage fix (commit `7e88e79`) and the Manage Plans UI (commit `8bc2bd8`), both deployed and verified clean on `fitkr.vercel.app`. Kept as a record of the process followed. **Start at the bottom, "← Start here."**
 
 1. ~~Read this entire document.~~ (still do this first, always)
 2. ~~Open `src/app/page.tsx` and work through the seven numbered items in the "NOT yet done" list above.~~ Done — see the "Frontend status: DONE" section.
 3. ~~Run `npx tsc --noEmit` and confirm it drops to zero errors.~~ Done, confirmed clean.
 4. ~~Run `rm -rf .next && npm run build` and confirm a clean production build.~~ Done.
 5. ~~Smoke-test locally via `next start` against the real DB.~~ Done — see the verification list under "RESOLVED".
-6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`.
-7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done — `dpl_8JXFHurVjdVWYfoiwx7RrFeca9Tw` is `READY`, aliased to `fitkr.vercel.app`, clean error window since deploy.
-8. **← Start here.** Ask the user whether to proceed to the "Manage Plans UI" (the actual point of Phase 3 — letting a user create/switch/edit their own plans instead of everyone being stuck on the one auto-created "PPL" plan; all 5 backend routes for it already exist and typecheck clean, see "Phase 3 sub-items not yet started" above) or something else — do not assume.
-9. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
+6. ~~Commit (specific files only, never `-A`) and push to `main`.~~ Done as `7e88e79`, then `8bc2bd8` for the Manage Plans UI.
+7. ~~Confirm the Vercel deployment reaches `READY` and `get_runtime_errors` shows a clean window.~~ Done for both commits.
+8. ~~Build the Manage Plans UI.~~ Done — see "RESOLVED — Manage Plans UI" near the top.
+9. **← Start here.** Ask the user which Phase 3 sub-item to pick up next (canonical muscle taxonomy, exercise alternatives, `exercises.priority`, custom-exercise form parity — see "Phase 3 sub-items not yet started" above) or whether to move to Phase 4 (dashboard/calendar) or Phase 5 (theming) instead — do not assume.
+10. Update this handoff document again once the next chunk of work lands, or sooner if context runs low — this has been the user's own preferred cadence throughout ("later when you approach the limit, lets update the handoff").
