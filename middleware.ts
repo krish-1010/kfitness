@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySessionCookie } from "@/lib/session";
 
 // Paths that must stay reachable without a session, or nobody could ever
-// log in (the login page itself, and the endpoint that issues the cookie).
-const PUBLIC_PATHS = ["/login", "/api/login"];
+// log in (the login page itself, and the endpoint that issues the cookie) --
+// plus the PWA assets, which browsers fetch unauthenticated to decide
+// whether to offer the install prompt at all, often before a first login.
+// None of these expose anything private.
+const PUBLIC_PATHS = ["/login", "/api/login", "/manifest.webmanifest", "/icon", "/apple-icon", "/sw.js"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
