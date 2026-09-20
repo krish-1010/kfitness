@@ -3,7 +3,7 @@ config({ path: ".env.local" });
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import * as schema from "../src/lib/schema";
 
@@ -98,9 +98,16 @@ async function run() {
       .select()
       .from(schema.exercises)
       .where(and(eq(schema.exercises.userId, templateUserId), eq(schema.exercises.archived, false)));
-    if (templateExercises.length > 0) {
-      await db.insert(schema.exercises).values(
-        templateExercises.map((e) => ({
+
+    // Inserted one at a time (not a single batched values([...])) so each
+    // new row's id can be captured immediately via .returning() -- needed
+    // to remap tutorial links onto the new exercise ids below, same
+    // old-id -> new-id pattern already used for planDays above.
+    const oldToNewExerciseId: Record<number, number> = {};
+    for (const e of templateExercises) {
+      const [newEx] = await db
+        .insert(schema.exercises)
+        .values({
           userId: user!.id,
           name: e.name,
           planDayId: oldToNewDayId[e.planDayId]!,
@@ -111,15 +118,27 @@ async function run() {
           block: e.block,
           muscleGroup: e.muscleGroup,
           trackingType: e.trackingType,
-        }))
-      );
+        })
+        .returning();
+      oldToNewExerciseId[e.id] = newEx!.id;
     }
     console.log(`Copied ${templateExercises.length} exercises from user ${templateUserId}`);
-  }
 
-  console.log(
-    "\nNote: tutorial links on the template's exercises were not copied (they'd need remapping to the new exercise ids) -- add them fresh via the app's manage panel if needed."
-  );
+    const templateExerciseIds = templateExercises.map((e) => e.id);
+    if (templateExerciseIds.length > 0) {
+      const templateLinks = await db.select().from(schema.exerciseLinks).where(inArray(schema.exerciseLinks.exerciseId, templateExerciseIds));
+      if (templateLinks.length > 0) {
+        await db.insert(schema.exerciseLinks).values(
+          templateLinks.map((l) => ({
+            exerciseId: oldToNewExerciseId[l.exerciseId]!,
+            label: l.label,
+            url: l.url,
+          }))
+        );
+      }
+      console.log(`Copied ${templateLinks.length} tutorial links`);
+    }
+  }
 }
 
 run()
