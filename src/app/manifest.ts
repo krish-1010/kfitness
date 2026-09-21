@@ -5,9 +5,9 @@ import type { MetadataRoute } from "next";
 // separately-planned local-first sync work.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Cut Tracker",
-    short_name: "Cut Tracker",
-    description: "Personal protein/calorie/supplement/weight/workout log",
+    name: "FitR",
+    short_name: "FitR",
+    description: "Protein/calorie/supplement/weight/workout log",
     start_url: "/",
     display: "standalone",
     background_color: "#15140F",
@@ -16,7 +16,7 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    // Lets "Cut Tracker" appear in the OS share sheet (Android/Chromium
+    // Lets "FitR" appear in the OS share sheet (Android/Chromium
     // only — iOS Safari has no Web Share Target support) once installed to
     // the home screen, so sharing a tutorial video from YouTube/Instagram/
     // etc. lands directly on the share-target page instead of requiring a

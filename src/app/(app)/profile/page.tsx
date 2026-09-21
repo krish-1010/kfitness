@@ -60,7 +60,7 @@ export default function ProfilePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cut-tracker-export-${TODAY()}.json`;
+    a.download = `fitr-export-${TODAY()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

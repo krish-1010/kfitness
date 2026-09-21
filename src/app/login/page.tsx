@@ -31,7 +31,7 @@ function LoginForm() {
 
   return (
     <form onSubmit={submit} className="w-full max-w-[320px] flex flex-col gap-3">
-      <div className="text-xl font-semibold mb-2">Cut Tracker</div>
+      <div className="text-xl font-semibold mb-2">FitR</div>
       <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoFocus className="input" />
       <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="input" />
       {error && <div className="text-destructive text-[13px]">{error}</div>}

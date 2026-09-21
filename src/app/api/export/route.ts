@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(JSON.stringify(payload, null, 2), {
     headers: {
       "Content-Type": "application/json",
-      "Content-Disposition": 'attachment; filename="cut-tracker-export.json"',
+      "Content-Disposition": 'attachment; filename="fitr-export.json"',
     },
   });
 }

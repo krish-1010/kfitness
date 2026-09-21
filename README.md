@@ -1,4 +1,4 @@
-# Cut Tracker
+# FitR
 
 Next.js port of the single-file React tracker. Same UI and logic, backed by
 Postgres instead of `localStorage` so it syncs across devices and survives

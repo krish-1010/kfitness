@@ -3,12 +3,12 @@ import "./globals.css";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
 
 export const metadata: Metadata = {
-  title: "Cut Tracker",
-  description: "Personal protein/calorie/supplement/weight log",
+  title: "FitR",
+  description: "Protein/calorie/supplement/weight log",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Cut Tracker",
+    title: "FitR",
   },
 };
 

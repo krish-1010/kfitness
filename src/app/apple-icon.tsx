@@ -24,7 +24,7 @@ export default function AppleIcon() {
             fontFamily: "sans-serif",
           }}
         >
-          CT
+          FR
         </div>
       </div>
     ),

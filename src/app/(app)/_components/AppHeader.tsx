@@ -38,7 +38,7 @@ export function AppHeader() {
       </button>
 
       <div className="text-center">
-        <div className="text-[11px] tracking-wide text-muted-foreground mb-0.5">CUT LOG</div>
+        <div className="text-[11px] tracking-wide text-muted-foreground mb-0.5">FITR LOG</div>
         <div className="text-[22px] font-semibold">
           {dateLabel}
           {isToday ? " · Today" : ""}

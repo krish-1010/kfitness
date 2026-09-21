@@ -26,7 +26,7 @@ export default function Icon() {
             fontFamily: "sans-serif",
           }}
         >
-          CT
+          FR
         </div>
       </div>
     ),
