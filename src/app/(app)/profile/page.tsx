@@ -3,16 +3,9 @@
 import { useEffect, useState } from "react";
 import { useTheme, ACCENT_PRESETS } from "../_lib/ThemeContext";
 import { useGoals } from "../_lib/GoalsContext";
+import { TODAY } from "@/lib/date";
 
 type Me = { email: string; displayName: string } | null;
-
-const PLACEHOLDER_ROWS = [
-  { label: "Change display name", desc: "Update the name shown across the app." },
-  { label: "Export data", desc: "Download your logs as a file." },
-  { label: "Import data", desc: "Restore logs from a backup file." },
-  { label: "Backup & sync", desc: "Automatic backups to cloud storage." },
-  { label: "Delete account", desc: "Permanently remove your account and data." },
-];
 
 export default function ProfilePage() {
   const [me, setMe] = useState<Me>(null);
@@ -20,11 +13,18 @@ export default function ProfilePage() {
   const { proteinGoal, kcalGoal, setProteinGoal, setKcalGoal } = useGoals();
   const [proteinInput, setProteinInput] = useState(String(proteinGoal));
   const [kcalInput, setKcalInput] = useState(String(kcalGoal));
+  const [displayNameInput, setDisplayNameInput] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch("/api/me")
       .then((r) => r.json())
-      .then(setMe);
+      .then((data: Me) => {
+        setMe(data);
+        setDisplayNameInput(data?.displayName ?? "");
+      });
   }, []);
 
   // Keep the free-typed inputs in sync when the loaded/saved goal changes
@@ -42,6 +42,33 @@ export default function ProfilePage() {
     const n = parseInt(kcalInput);
     if (Number.isFinite(n) && n > 0) setKcalGoal(n);
     else setKcalInput(String(kcalGoal));
+  };
+
+  const commitDisplayName = async () => {
+    if (displayNameInput === me?.displayName) return;
+    await fetch("/api/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: displayNameInput }),
+    });
+    setMe((prev) => (prev ? { ...prev, displayName: displayNameInput } : prev));
+  };
+
+  const handleExport = async () => {
+    const res = await fetch("/api/export");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cut-tracker-export-${TODAY()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    await fetch("/api/me", { method: "DELETE" });
+    window.location.href = "/login";
   };
 
   const logout = async () => {
@@ -114,18 +141,56 @@ export default function ProfilePage() {
         />
       </div>
 
-      <div className="section-label">MORE (COMING SOON)</div>
-      <div className="border border-border">
-        {PLACEHOLDER_ROWS.map((row) => (
-          <div key={row.label} className="list-row opacity-50">
-            <div className="flex justify-between items-center">
-              <span className="text-sm">{row.label}</span>
-              <span className="text-[10px] text-muted-foreground border border-border px-1.5 py-0.5">Coming soon</span>
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">{row.desc}</div>
-          </div>
-        ))}
+      <div className="section-label">ACCOUNT</div>
+      <div className="card mb-3">
+        <div className="text-[13px] text-muted-foreground mb-2">Display name</div>
+        <input value={displayNameInput} onChange={(e) => setDisplayNameInput(e.target.value)} onBlur={commitDisplayName} className="input" />
       </div>
+
+      <div className="border border-border mb-5">
+        <button onClick={handleExport} className="list-row flex justify-between items-center w-full bg-transparent text-left">
+          <div>
+            <div className="text-sm">Export data</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Download a full JSON backup of everything in your account.</div>
+          </div>
+        </button>
+        <button onClick={() => setShowDeleteConfirm(true)} className="list-row flex justify-between items-center w-full bg-transparent text-left">
+          <div>
+            <div className="text-sm text-destructive">Delete account</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Permanently remove your account and all logged data.</div>
+          </div>
+        </button>
+      </div>
+
+      {showDeleteConfirm && (
+        <div onClick={() => setShowDeleteConfirm(false)} className="modal-overlay z-30">
+          <div onClick={(e) => e.stopPropagation()} className="bg-card border border-border max-w-[380px] w-full p-4">
+            <div className="text-base font-semibold mb-2 text-destructive">Delete account</div>
+            <div className="text-[13px] text-muted-foreground mb-3">
+              This permanently deletes your account and every log — food, workouts, weights, supplements, all of it. This cannot be undone. Type your
+              email (<span className="text-foreground">{me?.email}</span>) to confirm.
+            </div>
+            <input
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              placeholder="Type your email"
+              className="input mb-3"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleDeleteAccount}
+                disabled={!me || deleteConfirmInput !== me.email || deleting}
+                className="flex-1 bg-destructive text-white border-none px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
+              >
+                {deleting ? "Deleting…" : "Permanently delete"}
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="btn-secondary flex-1">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

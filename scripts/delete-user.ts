@@ -5,6 +5,7 @@ import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq, inArray } from "drizzle-orm";
 import * as schema from "../src/lib/schema";
+import { deleteUserData } from "../src/lib/deleteUserData";
 
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql, { schema });
@@ -78,21 +79,7 @@ async function run() {
     process.exit(0);
   }
 
-  if (setLogRows.length > 0) await db.delete(schema.exerciseSetLog).where(inArray(schema.exerciseSetLog.exerciseLogId, exerciseLogIds));
-  await db.delete(schema.exerciseLog).where(eq(schema.exerciseLog.userId, userId));
-  if (links.length > 0) await db.delete(schema.exerciseLinks).where(inArray(schema.exerciseLinks.exerciseId, exerciseIds));
-  await db.delete(schema.exercises).where(eq(schema.exercises.userId, userId));
-  if (days.length > 0) await db.delete(schema.planDays).where(inArray(schema.planDays.planId, planIds));
-  await db.delete(schema.workoutPlans).where(eq(schema.workoutPlans.userId, userId));
-  await db.delete(schema.workoutSessions).where(eq(schema.workoutSessions.userId, userId));
-  await db.delete(schema.weights).where(eq(schema.weights.userId, userId));
-  await db.delete(schema.logItems).where(eq(schema.logItems.userId, userId));
-  await db.delete(schema.supplementLog).where(eq(schema.supplementLog.userId, userId));
-  await db.delete(schema.supplements).where(eq(schema.supplements.userId, userId));
-  await db.delete(schema.waterLog).where(eq(schema.waterLog.userId, userId));
-  await db.delete(schema.settings).where(eq(schema.settings.userId, userId));
-  await db.delete(schema.foods).where(eq(schema.foods.userId, userId));
-  await db.delete(schema.users).where(eq(schema.users.id, userId));
+  await deleteUserData(userId);
 
   console.log(`\nDeleted user ${email} (id ${userId}) and all owned data.`);
 }
