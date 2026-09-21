@@ -270,6 +270,7 @@ function ExerciseDetailModal({ target, onClose }: { target: DetailTarget; onClos
 // today's exercises (logged + suggested) actually cover.
 function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
   const [shown, setShown] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   if (!hasMuscleDiagramData(muscleGroups)) return null;
 
   return (
@@ -278,8 +279,22 @@ function MuscleDiagram({ muscleGroups }: { muscleGroups: string[] }) {
         {shown ? "Hide" : "👁 Muscles worked today"}
       </button>
       {shown && (
-        <div className="mt-2">
+        <button onClick={() => setExpanded(true)} className="mt-2 block text-center">
           <MuscleBodyView muscleGroups={muscleGroups} size={80} />
+          <span className="text-[10px] text-muted-foreground">Tap to enlarge</span>
+        </button>
+      )}
+      {expanded && (
+        <div onClick={() => setExpanded(false)} className="modal-overlay z-30">
+          <div onClick={(e) => e.stopPropagation()} className="bg-card border border-border max-w-[380px] w-full p-4">
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-[13px] font-semibold">Muscles worked today</div>
+              <button onClick={() => setExpanded(false)} className="bg-transparent border border-border text-muted-foreground px-2 py-0.5">
+                ✕
+              </button>
+            </div>
+            <MuscleBodyView muscleGroups={muscleGroups} size={170} />
+          </div>
         </div>
       )}
     </div>
