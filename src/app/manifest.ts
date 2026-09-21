@@ -16,5 +16,19 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icon", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
+    // Lets "Cut Tracker" appear in the OS share sheet (Android/Chromium
+    // only — iOS Safari has no Web Share Target support) once installed to
+    // the home screen, so sharing a tutorial video from YouTube/Instagram/
+    // etc. lands directly on the share-target page instead of requiring a
+    // manual copy-paste of the URL.
+    share_target: {
+      action: "/share-target",
+      method: "GET",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+      },
+    },
   };
 }
